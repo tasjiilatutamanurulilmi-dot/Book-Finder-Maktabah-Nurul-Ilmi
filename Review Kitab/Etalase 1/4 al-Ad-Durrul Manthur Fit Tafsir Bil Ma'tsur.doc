@@ -1,0 +1,40 @@
+
+                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+                <head>
+                    <meta charset="utf-8">
+                    <title>Review Kitab</title>
+                    <style>
+                        /* SUNTIKAN CSS KHUSUS UNTUK MS WORD */
+                        .review-body p, .review-body div {
+                            text-indent: 36px; /* Membuat baris pertama menjorok ke dalam (First-line indent) */
+                            margin-top: 8px;
+                            margin-bottom: 8px;
+                            text-align: justify; /* Opsional: Agar teks rata kiri-kanan rapi */
+                        }
+                        
+                        /* Pengecualian agar teks rata tengah atau list/poin tidak ikut menjorok */
+                        .review-body p[style*="center"], .review-body div[style*="center"] {
+                            text-indent: 0;
+                        }
+                        .review-body ul, .review-body ol, .review-body li {
+                            text-indent: 0;
+                        }
+                    </style>
+                </head>
+                <body style="font-family: Arial, sans-serif;">
+                    <h2>Review Kitab: الدرر المنثور في تفسير بالمأثور</h2>
+                    <h3>Penulis: جلال الدين عبد الرحمن بن أبي بكر بن محمد السيوطي</h3>
+                    <hr>
+                    
+                    <!-- PERBAIKAN GAMBAR: Menggunakan Tabel agar MS Word merender rapi berdampingan & proporsional -->
+                    <table style="width: 100%; border-collapse: collapse; border: none; margin-top: 15px;">
+                        <tr>
+                            <td style="vertical-align: top; padding-right: 20px; border: none;"><img src="file:///C:/Proyek/App Book Finder/Review Kitab/Etalase 1/4 al-Ad-Durrul Manthur Fit Tafsir Bil Ma'tsur Depan.jpg" style="width: 300px; height: auto;"></td>
+                            <td style="vertical-align: top; border: none;"><img src="file:///C:/Proyek/App Book Finder/Review Kitab/Etalase 1/4 al-Ad-Durrul Manthur Fit Tafsir Bil Ma'tsur Samping.jpg" style="width: 300px; height: auto;"></td>
+                        </tr>
+                    </table>
+                    
+                    <!-- Tambahkan class="review-body" agar CSS di atas bisa membaca elemen ini -->
+                    <div class="review-body" style="font-size: 14px; line-height: 1.6; margin-top: 20px;"><p><i>"Ingin berkata kasar, namun lisan terbiasa berdzikir." </i></p><p><i>"gasuka pamer, tapi kalau sampai pamer berarti ada hinaan yang harus dibayar."</i></p><p><i>"Kamu mati matian kerja, nahan lapar, capek, lalu orang lain menilai hidupmu, Sopankah begitu kisanak?"</i></p><p><i>"heran punya anak pas kecil takut sama orang gila giliran udah gede malah kaya orang gila"</i></p><p><i>"Gapapa kurang tidur, asal jangan kurang bersyukur"</i></p><p><i>"jangan pernah mengemis cinta. malu, kita lelaki."</i></p><p><i>"kamu itu kehilang arah atau kehilang figur yg mengarahkan?"</i></p><p><i>"hilang ku mungkin dapat membuat mu merasa lebih tenang."</i></p><p><i>"kunci hidup tenang, jangan ladenin orang berisik."</i></p><p><i>"Speak good or remain silent."</i></p><p><i>"Percuma nongkrong kalo ketawanya sama HP."</i></p><p><i>"Urip kuwi pancen keras, kanggo wong sing males berjuang."</i></p><p><i>"Tak ada tjinta jang sedjati, jang ada hanja ngopi."</i></p><p><i>"Dia mustahil dimiliki, tapi anehnya, aku menyukainya."</i></p><p><i>"jauh sekali ya manusia yang ku kagumi itu sekarang."</i></p><p><i>"info jual tahu isi tapi isinya kebahagiaan"</i></p></div>
+                </body>
+                </html>

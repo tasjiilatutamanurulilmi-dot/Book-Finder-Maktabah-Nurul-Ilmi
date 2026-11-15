@@ -1,0 +1,8 @@
+﻿*.dll
+*.exe
+*.pak
+*.bin
+*.dat
+*.json.bak
+locales/
+swiftshader/

@@ -1,0 +1,12 @@
+{
+  "name": "maktabah-nurul-ilmi",
+  "main": "index.html",
+  "window": {
+    "title": "Maktabah Nurul Ilmi",
+    "width": 1200,
+    "height": 700,
+    "position": "center",
+    "icon": "logo_enhanced_brown_1024.jpg"
+  },
+  "node-remote": []
+}

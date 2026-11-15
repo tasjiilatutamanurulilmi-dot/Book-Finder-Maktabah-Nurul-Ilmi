@@ -1,0 +1,60 @@
+
+                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+                <head><meta charset="utf-8">
+                    <title>Review Kitab</title>
+                    <style>
+                        /* SUNTIKAN CSS KHUSUS UNTUK MS WORD */
+                        .review-body p, .review-body div {
+                            text-indent: 36px; /* Membuat baris pertama menjorok ke dalam (First-line indent) */
+                            text-align: justify; /* Opsional: Agar teks rata kiri-kanan rapi */
+                        }
+
+                        /* --- SUNTIKAN FONT ARAB (KITAB) KHUSUS MS WORD --- */
+                        .font-arab {
+                            font-family: 'Traditional Arabic', 'Sakkal Majalla', 'Amiri', serif !important;
+                            font-size: 14pt; /* Ukuran huruf arab (perbesar jika kurang) */
+                            
+                        }
+                        /* Tabel Info di Word */
+                        .info-table {
+                            font-family: Arial, sans-serif;
+                            font-size: 14px;
+                            margin-bottom: 15px;
+                            border-collapse: collapse;
+                        }
+                        .info-table td {
+                            padding: 3px 8px 3px 0;
+                            vertical-align: top;
+                        }
+
+                        /* --- KODE BARU: Menghilangkan Space After Paragraph KHUSUS DI TABEL --- */
+                        .info-table td, .info-table p, .info-table div, .info-table span {
+                            margin: 0 !important;
+                            margin-bottom: 0 !important;
+                            margin-top: 0 !important;
+                            padding-bottom: 0 !important;
+                        }
+                        /* ----------------------------------------------------------------- */
+                        
+                    </style>
+                    </head>
+                <body style="font-family: Arial, sans-serif;">
+                    <h2>Review Kitab: <span class="font-arab">فتح الباري شرح صحيح البخاري</span></h2>
+                    
+                    <!-- INFO LENGKAP KITAB -->
+                    <table class="info-table">
+                        <tr><td><b>Penulis</b></td><td>:</td><td class="font-arab">ابن رجب الحنبلي</td></tr>
+                        <tr><td><b>Tahun Wafat</b></td><td>:</td><td>795 H</td></tr>
+                        <tr><td><b>Cetakan</b></td><td>:</td><td class="font-arab">دار ابن الجوزي (1430هـ)</td></tr>
+                        <tr><td><b>Bidang</b></td><td>:</td><td>SYARAH HADIS</td></tr>
+                    </table>
+                    
+                    <hr>
+
+                    <!-- PERBAIKAN GAMBAR: Menggunakan Tabel agar MS Word merender rapi berdampingan & proporsional -->
+                    <img src="file:///C:/Proyek/App Book Finder/Review Kitab/Etalase 2/3 al-Fathul Bari Syarah Shahih Al-Bukhari Depan.jpg" width="300" height="200" style="margin-right: 20px; display:inline-block;">
+                    <img src="file:///C:/Proyek/App Book Finder/Review Kitab/Etalase 2/3 Fathul Bari Syarah Shahih Al-Bukhari - Ibnu Rajab Al-Hanbali - Dar Ibnu Al-Jauzi (1430 H) Samping.jpg" width="300" height="200" style="display:inline-block;">
+                    
+                    <div class="review-body" style="font-size: 14px; line-height: 1.6; margin-top: 20px;"><p>awajhابسsja a </p></div>
+                </body>
+                </html>

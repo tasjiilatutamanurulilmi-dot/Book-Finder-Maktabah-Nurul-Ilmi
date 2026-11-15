@@ -1,0 +1,31 @@
+
+                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+                <head><meta charset="utf-8">
+                    <title>Review Kitab</title>
+                    <style>
+                        /* SUNTIKAN CSS KHUSUS UNTUK MS WORD */
+                        .review-body p, .review-body div {
+                            text-indent: 36px; /* Membuat baris pertama menjorok ke dalam (First-line indent) */
+                            text-align: justify; /* Opsional: Agar teks rata kiri-kanan rapi */
+                        }
+
+                        /* --- SUNTIKAN FONT ARAB (KITAB) KHUSUS MS WORD --- */
+                        .font-arab {
+                            font-family: 'Traditional Arabic', 'Sakkal Majalla', 'Amiri', serif !important;
+                            font-size: 20pt; /* Ukuran huruf arab (perbesar jika kurang) */
+                            
+                        }
+                    </style>
+                    </head>
+                <body style="font-family: Arial, sans-serif;">
+                    <h2>Review Kitab: أضواء البيان</h2>
+                    <h3>Penulis: محمد الأمين بن محمد المختار بن عبد القادر الجكني الشنقيطي</h3>
+                    <hr>
+
+                    <!-- PERBAIKAN GAMBAR: Menggunakan Tabel agar MS Word merender rapi berdampingan & proporsional -->
+                    
+                    
+                    
+                    <div class="review-body" style="font-size: 14px; line-height: 1.6; margin-top: 20px;"><p>d</p></div>
+                </body>
+                </html>
