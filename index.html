@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maktabah Nurul Ilmi</title>
-    <link rel="icon" href="data:,">
+    <link rel="icon" type="image/x-icon" href="sticker1.ico">
+    <link rel="shortcut icon" href="sticker1.ico">
+    <link rel="apple-touch-icon" href="logo_enhanced_brown_1024.jpg">
     
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Amiri:ital,wght@0,400;0,700;1,400&family=Segoe+UI:wght@400;600&display=swap" rel="stylesheet">
@@ -183,12 +185,21 @@
             position: relative;
 
             /* Memperkecil dan memusatkan gambar latar belakang */
-            background-image: url('image_71547e.png');
-            background-size: 650px auto; /* Logo di dalam gambar latar diperkecil ukurannya */
-            background-position: center;
-            background-attachment: fixed;
-            background-repeat: no-repeat;
             background-color: var(--bg-color);
+        }
+
+        /* Gambar latar sebagai layer tetap sendiri (jauh lebih ringan daripada background-attachment: fixed) */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -2;
+            pointer-events: none;
+            background-image: url('image_71547e.png');
+            background-size: 650px auto;
+            background-position: center;
+            background-repeat: no-repeat;
+            transform: translateZ(0);
         }
 
         /* Latar Belakang Logo & Bunga */
@@ -625,7 +636,7 @@
 
         .search-header { text-align: center; margin-bottom: 10px; }
         
-        .result-table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.7); backdrop-filter: blur(5px); border-radius: 10px; overflow: hidden; }
+        .result-table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.85); border-radius: 10px; overflow: hidden; }
         .result-table th, .result-table td {
             /* Bantalan (padding) dikecilkan. Atas-bawah 8px, Kiri-kanan 12px */
             padding: 11px 12px; 
@@ -3191,6 +3202,7 @@ async function kirimKeGoogleSheets(payload) {
 }
 
 let sudahRenderDariCache = false;
+let teksDataTerakhir = null; // JSON mentah yang sedang tampil, untuk menghindari render ulang yang sia-sia
 
 async function muatDataExcel() {
   // 1. Tampilkan data tersimpan dulu (instan) -- hanya saat halaman pertama dibuka
@@ -3198,7 +3210,10 @@ async function muatDataExcel() {
     sudahRenderDariCache = true;
     try {
       const cache = safeLS.getItem("cacheSheetsMaktabah");
-      if (cache) prosesDataSheets(JSON.parse(cache));
+      if (cache) {
+        teksDataTerakhir = cache;
+        prosesDataSheets(JSON.parse(cache));
+      }
     } catch (e) {
       console.warn("Cache lokal tidak bisa dipakai:", e);
     }
@@ -3208,7 +3223,10 @@ async function muatDataExcel() {
   let allSheetsData;
   try {
     const response = await fetch(GAS_WEBHOOK_URL);
-    allSheetsData = await response.json();
+    const teks = await response.text();
+    if (teks === teksDataTerakhir) return; // data sama persis: tidak perlu render ulang
+    allSheetsData = JSON.parse(teks);
+    teksDataTerakhir = teks;
   } catch (error) {
     console.error("Gagal memuat Google Sheets:", error);
     if (dataBuku.length === 0) {
@@ -3396,12 +3414,11 @@ function prosesDataSheets(allSheetsData) {
       infoContainer.innerHTML = infoUpdateHtml || `<div class="update-item">Belum ada sinkronisasi tanggal.</div>`;
     }
 
-    liveSearchKitab();
-    renderDaftarPenulis();
-    renderDaftarBidang();
-    renderDaftarCetakan();
-    renderPeminjaman();
-    renderHilang();
+    // Render bertahap supaya animasi & klik tidak tertahan satu tugas panjang
+    [liveSearchKitab, renderDaftarPenulis, renderDaftarBidang, renderDaftarCetakan, renderPeminjaman, renderHilang]
+      .forEach((fn, i) => setTimeout(() => {
+        try { fn(); } catch (e) { console.error("Gagal render:", fn.name, e); }
+      }, i * 30));
   } catch (error) {
     console.error("Gagal memuat Google Sheets:", error);
     document.getElementById("tableBodyKitab").innerHTML = `<tr><td colspan="6" style="color: red; font-weight: bold; padding: 20px;">Gagal terhubung ke Google Sheets!<br>Periksa koneksi internet atau URL Webhook Google Apps Script Anda.</td></tr>`;
