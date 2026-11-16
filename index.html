@@ -4,14 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maktabah Nurul Ilmi</title>
+    <link rel="icon" href="data:,">
     
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Amiri:ital,wght@0,400;0,700;1,400&family=Segoe+UI:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- TAMBAHKAN BARIS INI: Library SheetJS untuk membaca Excel -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <!-- TAMBAHKAN BARIS INI: Library SweetAlert2 untuk Popup -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -2926,6 +2925,17 @@
 
     <!-- LOGIKA JAVASCRIPT -->
     <script>
+  // Penyimpanan aman: jika browser memblokir localStorage (Tracking Prevention), pakai memori sementara
+  const safeLS = (() => {
+    const mem = {};
+    let ok = true;
+    try { window.localStorage.setItem("__t", "1"); window.localStorage.removeItem("__t"); } catch (e) { ok = false; }
+    return {
+      getItem: k => ok ? window.localStorage.getItem(k) : (k in mem ? mem[k] : null),
+      setItem: (k, v) => { if (ok) window.localStorage.setItem(k, v); else mem[k] = String(v); },
+      removeItem: k => { if (ok) window.localStorage.removeItem(k); else delete mem[k]; }
+    };
+  })();
         // Intro Screen ke Main App
 
         // ==========================================
@@ -3162,228 +3172,243 @@
         let dataPinjam = [];
         let dataHilang = [];
 
-        async function muatDataExcel() {
-            try {
-                // KEMBALI MENGGUNAKAN FETCH (Sangat stabil & aman untuk sekadar MEMBACA data di NW.js)
-                const response = await fetch('database.xlsx');
-                const arrayBuffer = await response.arrayBuffer();
-                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        // FILE: index.html - GANTI FUNGSI muatDataExcel()
+const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxwxWtndnJSBo0kT6grMuVHlGYRkmsOAD7hoMwgBetYkvaW8YUyhFF9Tti5Hu7WYCf7/exec";
 
-                dataBuku = []; // Kosongkan data awal
-                kamusWafatPenulis = {}; // Kosongkan kamus awal
-                dataPinjam = []; // Reset data
-                dataHilang = []; // Reset data
+async function kirimKeGoogleSheets(payload) {
+  const response = await fetch(GAS_WEBHOOK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify(payload)
+  });
+  const hasil = await response.json();
+  if (hasil.status !== "sukses") {
+    throw new Error(hasil.pesan || "Terjadi kesalahan pada Google Sheets.");
+  }
+  return hasil;
+}
 
-                // 1. LOOPING UNTUK SEMUA SHEET (Etalase 1, 2, 3, dst)
-                workbook.SheetNames.forEach(sheetName => {
+let sudahRenderDariCache = false;
 
-                    const worksheet = workbook.Sheets[sheetName];
-                    // defval: "" agar cell kosong tidak error
-                    const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+async function muatDataExcel() {
+  // 1. Tampilkan data tersimpan dulu (instan) -- hanya saat halaman pertama dibuka
+  if (!sudahRenderDariCache) {
+    sudahRenderDariCache = true;
+    try {
+      const cache = safeLS.getItem("cacheSheetsMaktabah");
+      if (cache) prosesDataSheets(JSON.parse(cache));
+    } catch (e) {
+      console.warn("Cache lokal tidak bisa dipakai:", e);
+    }
+  }
 
-                    // --- 1. TARIK DATA PINJAM & TANGGAL UPDATE ---
-                    if (sheetName.toLowerCase().includes("dipinjam ustadz")) {
-                        rows.forEach(row => {
-                            // Deteksi jika baris ini adalah baris khusus "Update"
-                            if (row['Nama Ustadz'] && row['Nama Ustadz'].toString().toLowerCase().includes("update:")) {
-                                let teksUpdate = row['Nama Ustadz'].toString();
-                                // Cetak ke header HTML (Publik & Admin)
-                                let elPublik = document.getElementById('teksUpdatePinjamPublik');
-                                let elAdmin = document.getElementById('teksUpdatePinjamAdmin');
-                                if(elPublik) elPublik.innerText = teksUpdate;
-                                if(elAdmin) elAdmin.innerText = teksUpdate;
-                                return; // Berhenti di sini, JANGAN masukkan baris tulisan update ini ke dalam tabel buku
-                            }
+  // 2. Ambil data terbaru dari Google Sheets di latar belakang
+  let allSheetsData;
+  try {
+    const response = await fetch(GAS_WEBHOOK_URL);
+    allSheetsData = await response.json();
+  } catch (error) {
+    console.error("Gagal memuat Google Sheets:", error);
+    if (dataBuku.length === 0) {
+      document.getElementById("tableBodyKitab").innerHTML = `<tr><td colspan="6" style="color: red; font-weight: bold; padding: 20px;">Gagal terhubung ke Google Sheets!<br>Periksa koneksi internet atau URL Webhook Google Apps Script Anda.</td></tr>`;
+    }
+    return;
+  }
 
-                            if (row['judul kitab']) {
-                                dataPinjam.push({
-                                    nama: row['Nama Ustadz'] || "-",
-                                    tglPinjam: row['Tanggal Pinjam'] || "-",
-                                    status: row['Status'] || "-",
-                                    tglKembali: row['Tanggal Kembali'] || "-",
-                                    noUrut: row['mor urut kit'] || row['nomor urut kitab'] || "-",
-                                    judul: row['judul kitab'] || "-",
-                                    jilid: row['Jilid Berapa'] || "-",
-                                    rak: row['Etalase, Rak'] || "-"
-                                });
-                            }
-                        });
-                        return; // <--- KUNCI ANTI TABRAKAN 1: Stop di sini, jangan jadikan Kitab Utama!
-                    }
+  try { safeLS.setItem("cacheSheetsMaktabah", JSON.stringify(allSheetsData)); } catch (e) { /* kuota penuh: abaikan */ }
+  prosesDataSheets(allSheetsData);
+}
 
-                    // --- 2. TARIK DATA HILANG ---
-                    if (sheetName.toLowerCase().includes("yang tidak ada di")) {
-                        let matchEtalase = sheetName.match(/\d+/);
-                        let angkaEtalase = matchEtalase ? matchEtalase[0] : ""; // Mendapatkan angka dari nama sheet
+function prosesDataSheets(allSheetsData) {
+  try {
+    dataBuku = [];
+    kamusWafatPenulis = {};
+    dataPinjam = [];
+    dataHilang = [];
+    updateDataMap = {};
 
-                        rows.forEach(row => {
-                            if (row['judul kitab']) {
-                                dataHilang.push({
-                                    noUrut: row['nomor urut'] || row['nomor urut kit'] || row['nomor urut kitab'] || "-",
-                                    judul: row['judul kitab'] || "-",
-                                    jilid: row['jumlah jilid'] || row['Jilid Berapa'] || "-",
-                                    rak: row['رف'] || row['Etalase, Rak'] || "-", // Mengambil huruf rak murni (B, C, D)
-                                    keterangan: row['status'] || row['Keterangan'] || "Tidak Ada di Rak",
-                                    etalaseID: angkaEtalase // <--- MENYIMPAN ANGKA ETALASE DARI NAMA SHEET
-                                });
-                            }
-                        });
-                        return; // Stop di sini agar tidak merusak data rak utama
-                    }
+    Object.keys(allSheetsData).forEach(sheetName => {
+      const rows = allSheetsData[sheetName] || [];
 
-                    // --- BUAT KAMUS WAFAT DENGAN NAMA TANPA HARAKAT ---
-                    // Jika nama sheet-nya adalah "Data Penulis", simpan ke kamus lalu berhenti (jangan jadikan buku)
-                    if (sheetName.toLowerCase() === "data penulis") {
-                        rows.forEach(row => {
-                            let nama = row['penulis'] ? row['penulis'].toString() : "";
-                            nama = hapusHarakat(nama); // Bersihkan harakat di kunci kamus
-                            const wafat = row['tahun wafat'] || "";
-                            const info = row['info'] ? row['info'].toString().trim() : ""; // Tangkap kolom info
+      // Abaikan sheet temuan sementara
+      if (sheetName.toLowerCase().includes("kitab temuan")) {
+        return;
+      }
 
-                            if (nama) {
-                                // Simpan wafat dan info sebagai objek
-                                kamusWafatPenulis[nama] = { wafat: wafat, info: info };
-                            }
-                        });
-                        return; // Lanjut ke sheet berikutnya
-                    }
+      // 1. TARIK DATA PINJAM & TANGGAL UPDATE
+      if (sheetName.toLowerCase().includes("dipinjam ustadz")) {
+        rows.forEach(row => {
+          if (row["Nama Ustadz"] && row["Nama Ustadz"].toString().toLowerCase().includes("update:")) {
+            let teksUpdate = row["Nama Ustadz"].toString();
+            let elPublik = document.getElementById("teksUpdatePinjamPublik");
+            let elAdmin = document.getElementById("teksUpdatePinjamAdmin");
+            if (elPublik) elPublik.innerText = teksUpdate;
+            if (elAdmin) elAdmin.innerText = teksUpdate;
+            return;
+          }
 
-                    // --- PEMBERSIH KARAKTER HANTU EXCEL ---
-        // Menyetrika semua teks dari Enter tersembunyi, spasi ganda, dan karakter RTL Arab
-        dataBuku.forEach(buku => {
-            Object.keys(buku).forEach(key => {
-                if (typeof buku[key] === 'string') {
-                    buku[key] = buku[key]
-                        .replace(/[\r\n]+/g, ' ') // Mengubah Enter/Garis baru menjadi spasi
-                        .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, '') // Menghapus kode formatting tak kasat mata
-                        .replace(/\s+/g, ' ') // Merapikan spasi ganda menjadi spasi tunggal
-                        .trim(); // Memotong spasi nyasar di awal/akhir teks
-                }
+          if (row["judul kitab"]) {
+            dataPinjam.push({
+              nama: row["Nama Ustadz"] || "-",
+              tglPinjam: row["Tanggal Pinjam"] || "-",
+              status: row["Status"] || "-",
+              tglKembali: row["Tanggal Kembali"] || "-",
+              noUrut: row["mor urut kit"] || row["nomor urut kitab"] || "-",
+              judul: row["judul kitab"] || "-",
+              jilid: row["Jilid Berapa"] || "-",
+              rak: row["Etalase, Rak"] || "-"
             });
+          }
         });
-        // ---------------------------------------
+        return;
+      }
 
-                    // =========================================================================
-                    // JIKA BUKAN KETIGA SHEET KHUSUS DI ATAS, MAKA BARU MASUK KE KITAB UTAMA
-                    // =========================================================================                    
-                    let bidangSaatIni = "Umum"; // Default jika baris biru belum terdeteksi
+      // 2. TARIK DATA HILANG
+      if (sheetName.toLowerCase().includes("yang tidak ada di")) {
+        let matchEtalase = sheetName.match(/\d+/);
+        let angkaEtalase = matchEtalase ? matchEtalase[0] : "";
 
-                    // 2. BACA BARIS DEMI BARIS
-                    rows.forEach(row => {
-                        // LOGIKA BARU: Tarik tanggal update
-                        for (let key in row) {
-                            let cellValue = row[key] ? row[key].toString().trim() : "";
-                            // Jika ada sel yang mengandung tulisan "Update:"
-                            if (cellValue.toUpperCase().includes("UPDATE:")) {
-                                let parts = cellValue.split(/UPDATE:/i); // Potong dan ambil teks setelah tulisan Update:
-                                if (parts.length > 1) {
-                                    let tglUpdate = parts[1].trim();
-                                    // Jika tanggal ini belum ada di map, buatkan wadah array baru
-                                    if (!updateDataMap[tglUpdate]) {
-                                        updateDataMap[tglUpdate] = [];
-                                    }
-                                    // Jika sheet ini belum masuk ke kelompok tanggal tersebut, masukkan!
-                                    if (!updateDataMap[tglUpdate].includes(sheetName)) {
-                                        updateDataMap[tglUpdate].push(sheetName);
-                                    }
-                                }
-                            }
-                        }
+        rows.forEach(row => {
+          if (row["judul kitab"]) {
+            dataHilang.push({
+              noUrut: row["nomor urut"] || row["nomor urut kit"] || row["nomor urut kitab"] || "-",
+              judul: row["judul kitab"] || "-",
+              jilid: row["jumlah jilid"] || row["Jilid Berapa"] || "-",
+              rak: row["رف"] || row["Etalase, Rak"] || "-",
+              keterangan: row["status"] || row["Keterangan"] || "Tidak Ada di Rak",
+              etalaseID: angkaEtalase
+            });
+          }
+        });
+        return;
+      }
 
-                        // Gabungkan seluruh isi teks dalam 1 baris untuk mendeteksi Header Kategori
-                        const teksBaris = Object.values(row).join(" ").toUpperCase();
+      // 3. TARIK DATA PENULIS
+      if (sheetName.toLowerCase() === "data penulis") {
+        rows.forEach(row => {
+          let nama = row["penulis"] ? row["penulis"].toString() : "";
+          nama = hapusHarakat(nama);
+          const wafat = row["tahun wafat"] || "";
+          const info = row["info"] ? row["info"].toString().trim() : "";
 
-                        // A. Jika baris ini mengandung kata "BIDANG:", simpan sebagai kategori saat ini
-                        if (teksBaris.includes("BIDANG:")) {
-                            const match = teksBaris.match(/BIDANG:\s*(.+)/);
-                            if (match) bidangSaatIni = match[1].trim();
-                            return; // Lanjut ke baris selanjutnya, jangan dimasukkan ke tabel
-                        }
+          if (nama) {
+            kamusWafatPenulis[nama] = { wafat: wafat, info: info };
+          }
+        });
+        return;
+      }
 
-                        // B. Abaikan baris yang tidak ada judul kitabnya (seperti baris "RAK A", "Update", dll)
-                        const judulKitab = row['judul kitab'] || "";
-                        if (judulKitab.trim() === "" || teksBaris.includes("UPDATE:")) {
-                            return; 
-                        }
+      // 4. TARIK DATA ETALASE UTAMA
+      let bidangSaatIni = "Umum";
 
-                        // C. Jika ini adalah buku sungguhan, masukkan ke database aplikasi
-                        const kodeRak = row['رف'] || "";
-                        // Format: "Etalase 1 (Rak A)"
-                        const etalaseLengkap = kodeRak ? `${sheetName} (Rak ${kodeRak})` : sheetName;
-
-                        dataBuku.push({
-                            judul: judulKitab,
-                            penulis: row['penulis'] || row['Penulis'] || "-",
-                            cetakan: row['penerbit'] || row['penertbit'] || row['Penerbit'] || "-",
-                            jilid: row['jumlah jilid'] || row['Jumlah Jilid'] || "-",
-                            etalase: etalaseLengkap,
-                            bidang: bidangSaatIni,
-                            nomorUrut: row['nomor urut'] || row['Nomor Urut'] || "-",
-                            judul_latin: row['Judul Kitab (Latin)'] || "-",
-                            penulis_latin: row['Penulis (Latin)'] || "-",
-                            cetakan_latin: row['Penerbit/Cetakan (Latin)'] || "-",
-                            
-                            // KUNCI PERBAIKAN: Membaca berbagai variasi penulisan kolom gambar di Excel
-                            fotoDepan: row['depan'] || row['Depan'] || row['DEPAN'] || "",
-                            fotoSamping: row['samping'] || row['Samping'] || row['SAMPING'] || "",
-                            teksReview: row['teks review'] || row['Teks Review'] || ""
-                        });
-                    });
-                });
-
-                // 3. UPDATE STATISTIK DI HALAMAN HOME
-                document.getElementById('statKitab').innerText = dataBuku.length;
-                
-                const penulisUnik = new Set(dataBuku.map(b => b.penulis).filter(p => p !== "-"));
-                const cetakanUnik = new Set(dataBuku.map(b => b.cetakan).filter(c => c !== "-"));
-                const bidangUnik = new Set(dataBuku.map(b => b.bidang).filter(b => b !== "Umum"));
-                
-                document.getElementById('statPenulis').innerText = penulisUnik.size;
-                document.getElementById('statCetakan').innerText = cetakanUnik.size;
-                document.getElementById('statBidang').innerText = bidangUnik.size;
-                
-                // Pengaman agar JS tidak error jika elemen 'lastUpdate' di Home dihapus
-                const elLastUpdate = document.getElementById('lastUpdate');
-                if (elLastUpdate) {
-                    const hariIni = new Date();
-                    elLastUpdate.innerText = hariIni.toLocaleDateString('id-ID');
-                    elLastUpdate.style.color = 'var(--brown-dark)';
-                    elLastUpdate.style.fontStyle = 'normal';
-                }
-
-                // 3. UPDATE STATISTIK DI HALAMAN HOME
-                // ... (biarkan kode statistik yang sudah ada)
-
-                // LOGIKA BARU: Cetak Info Update Data ke Halaman Info
-                let infoUpdateHtml = '';
-                for (const tgl in updateDataMap) {
-                    let sheetsArray = updateDataMap[tgl];
-                    // Menggunakan mesin pintar perangkum angka Etalase
-                    let sheetsText = formatEtalasePintar(sheetsArray);
-                    
-                    infoUpdateHtml += `<div class="update-item"><i class="fa-solid fa-clock-rotate-left" style="margin-right: 5px;"></i> Update Data ${sheetsText}: <strong>${tgl}</strong></div>`;
-                }
-                const infoContainer = document.getElementById('infoUpdateData');
-                if (infoContainer) {
-                    infoContainer.innerHTML = infoUpdateHtml || `<div class="update-item">Belum ada sinkronisasi tanggal.</div>`;
-                }
-
-                // 4. TAMPILKAN KE TABEL
-                liveSearchKitab();
-                renderDaftarPenulis(); // <--- TAMBAHKAN BARIS INI
-                renderDaftarBidang();
-                renderDaftarCetakan();
-                renderPeminjaman();
-                renderHilang();
-
-            } catch (error) {
-                console.error("Gagal memuat Excel:", error);
-                document.getElementById('tableBodyKitab').innerHTML = `<tr><td colspan="6" style="color: red; font-weight: bold; padding: 20px;">Gagal memuat database.xlsx!<br>Pastikan file Excel bernama persis 'database.xlsx' (huruf kecil) berada di folder yang sama, dan Anda membuka web menggunakan ekstensi 'Live Preview' di VS Code.</td></tr>`;
+      rows.forEach(row => {
+        for (let key in row) {
+          let cellValue = row[key] ? row[key].toString().trim() : "";
+          if (cellValue.toUpperCase().includes("UPDATE:")) {
+            let parts = cellValue.split(/UPDATE:/i);
+            if (parts.length > 1) {
+              let tglUpdate = parts[1].trim();
+              if (!updateDataMap[tglUpdate]) {
+                updateDataMap[tglUpdate] = [];
+              }
+              if (!updateDataMap[tglUpdate].includes(sheetName)) {
+                updateDataMap[tglUpdate].push(sheetName);
+              }
             }
+          }
         }
-        
-        // Panggil fungsi segera setelah halaman dimuat
-        muatDataExcel();
+
+        const teksBaris = Object.values(row).join(" ").toUpperCase();
+
+        if (teksBaris.includes("BIDANG:")) {
+          const match = teksBaris.match(/BIDANG:\s*(.+)/);
+          if (match) bidangSaatIni = match[1].trim();
+          return;
+        }
+
+        const judulKitab = row["judul kitab"] || "";
+        if (judulKitab.trim() === "" || teksBaris.includes("UPDATE:")) {
+          return;
+        }
+
+        const kodeRak = row["رف"] || "";
+        const etalaseLengkap = kodeRak ? `${sheetName} (Rak ${kodeRak})` : sheetName;
+
+        dataBuku.push({
+          judul: judulKitab,
+          penulis: row["penulis"] || row["Penulis"] || "-",
+          cetakan: row["penerbit"] || row["penertbit"] || row["Penerbit"] || "-",
+          jilid: row["jumlah jilid"] || row["Jumlah Jilid"] || "-",
+          etalase: etalaseLengkap,
+          bidang: bidangSaatIni,
+          nomorUrut: row["nomor urut"] || row["Nomor Urut"] || "-",
+          judul_latin: row["Judul Kitab (Latin)"] || "-",
+          penulis_latin: row["Penulis (Latin)"] || "-",
+          cetakan_latin: row["Penerbit/Cetakan (Latin)"] || "-",
+          fotoDepan: row["depan"] || row["Depan"] || row["DEPAN"] || "",
+          fotoSamping: row["samping"] || row["Samping"] || row["SAMPING"] || "",
+          teksReview: row["teks review"] || row["Teks Review"] || ""
+        });
+      });
+    });
+
+    // Pembersih karakter tersembunyi
+    dataBuku.forEach(buku => {
+      Object.keys(buku).forEach(key => {
+        if (typeof buku[key] === "string") {
+          buku[key] = buku[key]
+            .replace(/[\r\n]+/g, " ")
+            .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        }
+      });
+    });
+
+    // Update Statistik di Halaman Home
+    document.getElementById("statKitab").innerText = dataBuku.length;
+    const penulisUnik = new Set(dataBuku.map(b => b.penulis).filter(p => p !== "-"));
+    const cetakanUnik = new Set(dataBuku.map(b => b.cetakan).filter(c => c !== "-"));
+    const bidangUnik = new Set(dataBuku.map(b => b.bidang).filter(b => b !== "Umum"));
+
+    document.getElementById("statPenulis").innerText = penulisUnik.size;
+    document.getElementById("statCetakan").innerText = cetakanUnik.size;
+    document.getElementById("statBidang").innerText = bidangUnik.size;
+
+    const elLastUpdate = document.getElementById("lastUpdate");
+    if (elLastUpdate) {
+      const hariIni = new Date();
+      elLastUpdate.innerText = hariIni.toLocaleDateString("id-ID");
+      elLastUpdate.style.color = "var(--brown-dark)";
+      elLastUpdate.style.fontStyle = "normal";
+    }
+
+    let infoUpdateHtml = "";
+    for (const tgl in updateDataMap) {
+      let sheetsArray = updateDataMap[tgl];
+      let sheetsText = formatEtalasePintar(sheetsArray);
+      infoUpdateHtml += `<div class="update-item"><i class="fa-solid fa-clock-rotate-left" style="margin-right: 5px;"></i> Update Data ${sheetsText}: <strong>${tgl}</strong></div>`;
+    }
+    const infoContainer = document.getElementById("infoUpdateData");
+    if (infoContainer) {
+      infoContainer.innerHTML = infoUpdateHtml || `<div class="update-item">Belum ada sinkronisasi tanggal.</div>`;
+    }
+
+    liveSearchKitab();
+    renderDaftarPenulis();
+    renderDaftarBidang();
+    renderDaftarCetakan();
+    renderPeminjaman();
+    renderHilang();
+  } catch (error) {
+    console.error("Gagal memuat Google Sheets:", error);
+    document.getElementById("tableBodyKitab").innerHTML = `<tr><td colspan="6" style="color: red; font-weight: bold; padding: 20px;">Gagal terhubung ke Google Sheets!<br>Periksa koneksi internet atau URL Webhook Google Apps Script Anda.</td></tr>`;
+  }
+}
+
+muatDataExcel();
 
         // ==========================================
         // FITUR TABEL DIPINJAM & HILANG
@@ -3590,7 +3615,6 @@ function pilihModePencarian(mode, teks, event) {
             // Jika tidak ada hasil setelah difilter, cetak pesan tidak ditemukan dan hentikan proses
             if (dataTersaring.length === 0) {
                 tbody.innerHTML = `<tr class="no-ripple" style="pointer-events: none; background-color: transparent !important;"><td colspan="6" style="padding: 30px; color: var(--brown-light); text-align: center;">Kitab tidak ditemukan. Coba ganti mode pencarian atau cek ejaan.</td></tr>`;
-                document.getElementById('hasilCountKitab').innerText = "";
                 return; 
             }
 
@@ -4686,77 +4710,6 @@ if (sortPenulisSaatIni === 'wafat') {
             }
         }
         
-        function simpanPeminjamanKeExcel() {            
-            let password = prompt("Masukkan Password Petugas:");
-                        
-            if (password !== "1526") { 
-                alert("Password salah! Akses ditolak.");
-                return;
-            }
-
-            // 2. Ambil nilai dari Form Input HTML Anda
-            const namaUstadz = document.getElementById('inputNamaUstadz').value;
-            const tglPinjam = document.getElementById('inputTglPinjam').value;
-            const noUrut = document.getElementById('inputNoUrut').value;
-            const judulKitab = document.getElementById('inputJudulKitab').value;
-            const jilid = document.getElementById('inputJilid').value;
-            const rak = document.getElementById('inputRak').value;
-
-            if (!namaUstadz || !judulKitab) {
-                alert("Nama Ustadz dan Judul Kitab wajib diisi!");
-                return;
-            }
-
-            // Jalur file database.xlsx di folder yang sama dengan aplikasi .exe
-            const filePath = path.join(process.cwd(), 'database.xlsx');
-
-            try {
-                // Buka file Excel yang ada
-                const workbook = XLSX.readFile(filePath);
-                const sheetName = "Dipinjam Ustadz";
-                
-                // Cek apakah sheet "Dipinjam Ustadz" ada
-                if (!workbook.Sheets[sheetName]) {
-                    alert("Sheet 'Dipinjam Ustadz' tidak ditemukan di dalam file database.xlsx!");
-                    return;
-                }
-
-                const worksheet = workbook.Sheets[sheetName];
-
-                // Ubah isi sheet tersebut menjadi format array JSON
-                let rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-
-                // Tambahkan baris baru sesuai nama kolom di Excel
-                rows.push({
-                    "Nama Ustadz": namaUstadz,
-                    "Tanggal Pinjam": tglPinjam,
-                    "Status": "Dipinjam",
-                    "Tanggal Kembali": "-",
-                    "mor urut kit": noUrut,
-                    "judul kitab": judulKitab,
-                    "Jilid Berapa": jilid,
-                    "Etalase, Rak": rak
-                });
-
-                // Konversi kembali menjadi lembar kerja (worksheet) baru
-                const newWorksheet = XLSX.utils.json_to_sheet(rows);
-
-                // Timpa sheet lama dengan sheet yang baru diperbarui
-                workbook.Sheets[sheetName] = newWorksheet;
-
-                // Simpan / tulis ulang secara permanen ke file database.xlsx
-                XLSX.writeFile(workbook, filePath);
-
-                alert("Data peminjaman berhasil disimpan langsung ke file Excel!");
-                
-                // Muat ulang data Excel di aplikasi agar tabel langsung ter-update otomatis
-                muatDataExcel(); 
-
-            } catch (error) {
-                console.error("Gagal menulis ke Excel:", error);
-                alert("Gagal menyimpan! Pastikan file 'database.xlsx' sedang tidak Anda buka di Microsoft Excel.");
-            }
-        }
 
         // ==========================================
         // SISTEM KEAMANAN 3 LAPIS ADMIN (TEKS + 2 POLA)
@@ -4770,7 +4723,7 @@ if (sortPenulisSaatIni === 'wafat') {
 
         function mulaiLoginAdmin() {
             // Cek Memori Permanen (Local Storage) untuk melihat sisa penalti
-            let lockUntil = localStorage.getItem('lockoutEndTime');
+            let lockUntil = safeLS.getItem('lockoutEndTime');
             if (lockUntil) {
                 let sisaWaktu = Math.ceil((parseInt(lockUntil) - Date.now()) / 1000);
                 if (sisaWaktu > 0) {
@@ -4778,8 +4731,8 @@ if (sortPenulisSaatIni === 'wafat') {
                     return;
                 } else {
                     // Waktu sudah habis, hapus penalti
-                    localStorage.removeItem('lockoutEndTime');
-                    localStorage.setItem('jumlahSalah', 0);
+                    safeLS.removeItem('lockoutEndTime');
+                    safeLS.setItem('jumlahSalah', 0);
                 }
             }
 
@@ -4803,20 +4756,20 @@ if (sortPenulisSaatIni === 'wafat') {
             batalPasswordTeks(); 
             
             if (pwd === "reset123") {
-                localStorage.setItem('adminPasswordTeks', 'khusus admin');
-                localStorage.setItem('adminPola1', '1,2,3,4');
-                localStorage.setItem('adminPola2', '13,14,15,16');
-                localStorage.setItem('jumlahSalah', 0);
-                localStorage.removeItem('lockoutEndTime');
+                safeLS.setItem('adminPasswordTeks', 'khusus admin');
+                safeLS.setItem('adminPola1', '1,2,3,4');
+                safeLS.setItem('adminPola2', '13,14,15,16');
+                safeLS.setItem('jumlahSalah', 0);
+                safeLS.removeItem('lockoutEndTime');
                 alert("BERHASIL RESET!)");
                 return; // Hentikan fungsi, minta user login ulang
             }
             // =========================================================
             
-            let sandiValid = localStorage.getItem('adminPasswordTeks');
+            let sandiValid = safeLS.getItem('adminPasswordTeks');
             if (!sandiValid) {
                 sandiValid = "khusus admin"; 
-                localStorage.setItem('adminPasswordTeks', sandiValid); 
+                safeLS.setItem('adminPasswordTeks', sandiValid); 
             }
             
             if (pwd === sandiValid) {
@@ -4830,8 +4783,8 @@ if (sortPenulisSaatIni === 'wafat') {
         // --- SISTEM PENALTI PERMANEN ---
         function prosesSalah() {
             // Ambil riwayat salah dari memori komputer, lalu tambah 1
-            let jumlahSalah = parseInt(localStorage.getItem('jumlahSalah') || 0) + 1;
-            localStorage.setItem('jumlahSalah', jumlahSalah);
+            let jumlahSalah = parseInt(safeLS.getItem('jumlahSalah') || 0) + 1;
+            safeLS.setItem('jumlahSalah', jumlahSalah);
             
             if (jumlahSalah >= 3) {
                 let kelipatan = jumlahSalah - 2; 
@@ -4839,7 +4792,7 @@ if (sortPenulisSaatIni === 'wafat') {
                 
                 // KUNCI PERMANEN: Simpan "jam" selesai penalti di memori
                 let lockUntil = Date.now() + (waktuTunggu * 1000);
-                localStorage.setItem('lockoutEndTime', lockUntil);
+                safeLS.setItem('lockoutEndTime', lockUntil);
                 
                 batalPasswordTeks();
                 batalLoginAdmin(); // Paksa keluar modal pola
@@ -4848,10 +4801,10 @@ if (sortPenulisSaatIni === 'wafat') {
                 
                 // Timer berjalan di latar (tetap lanjut meski direfresh)
                 let timer = setInterval(() => {
-                    let sisa = Math.ceil((parseInt(localStorage.getItem('lockoutEndTime')) - Date.now()) / 1000);
+                    let sisa = Math.ceil((parseInt(safeLS.getItem('lockoutEndTime')) - Date.now()) / 1000);
                     if (sisa <= 0) {
                         clearInterval(timer);
-                        localStorage.removeItem('lockoutEndTime');
+                        safeLS.removeItem('lockoutEndTime');
                     }
                 }, 1000);
             } else {
@@ -4921,16 +4874,16 @@ if (sortPenulisSaatIni === 'wafat') {
             let hasilPola = polaSaatIni.join(',');
             
             // Pertegas ingatan Local Storage untuk Pola
-            let kunciPola1 = localStorage.getItem('adminPola1');
+            let kunciPola1 = safeLS.getItem('adminPola1');
             if (!kunciPola1) {
                 kunciPola1 = "1,2,3,4";
-                localStorage.setItem('adminPola1', kunciPola1);
+                safeLS.setItem('adminPola1', kunciPola1);
             }
             
-            let kunciPola2 = localStorage.getItem('adminPola2');
+            let kunciPola2 = safeLS.getItem('adminPola2');
             if (!kunciPola2) {
                 kunciPola2 = "13,14,15,16";
-                localStorage.setItem('adminPola2', kunciPola2);
+                safeLS.setItem('adminPola2', kunciPola2);
             }
             
             // --- JIKA MODAL DIPAKAI UNTUK LOGIN ---
@@ -4974,9 +4927,9 @@ if (sortPenulisSaatIni === 'wafat') {
                     document.getElementById('pesanErrorPola').innerText = "Minimal hubungkan 3 titik!";
                 } else {
                     // KUNCI UTAMA: Tancapkan sandi baru ke Local Storage dengan tegas!
-                    localStorage.setItem('adminPola1', window.tempPola1);
-                    localStorage.setItem('adminPola2', hasilPola);
-                    localStorage.setItem('adminPasswordTeks', tempPasswordTeks);
+                    safeLS.setItem('adminPola1', window.tempPola1);
+                    safeLS.setItem('adminPola2', hasilPola);
+                    safeLS.setItem('adminPasswordTeks', tempPasswordTeks);
                     
                     batalLoginAdmin();
                     alert("Berhasil! Password Teks dan Kedua Pola Admin telah dikunci teguh di memori aplikasi.");
@@ -5350,72 +5303,6 @@ if (sortPenulisSaatIni === 'wafat') {
             }
         });
 
-        // =====================================================================
-// FUNGSI BARU: SINKRONISASI STATUS OTOMATIS KE SHEET ETALASE
-// =====================================================================
-function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomorUrut, judulKitab) {
-    let etalaseInduk = (etalaseLengkap || "").split(" (")[0].trim();
-    if (!workbook.Sheets[etalaseInduk]) return; 
-
-    let rowsEtalase = XLSX.utils.sheet_to_json(workbook.Sheets[etalaseInduk], { defval: "" });
-
-    let targetIndex = rowsEtalase.findIndex(r => {
-        let noEx = String(r['nomor urut'] || r['Nomor Urut'] || r['mor urut kit'] || "").trim();
-        let noAp = String(nomorUrut).trim();
-        let jdlEx = String(r['judul kitab'] || r['Judul Kitab'] || "").trim();
-        let jdlAp = String(judulKitab).trim();
-        return (noEx === noAp) && (jdlEx === jdlAp);
-    });
-
-    if (targetIndex !== -1) {
-        // Tangkap data yang berstatus DIPINJAM maupun HILANG
-        let recordTerkait = rowsDipinjam.filter(r => {
-            let noEx = String(r['mor urut kit'] || r['nomor urut kitab'] || "").trim();
-            let jdlEx = String(r['judul kitab'] || "").trim();
-            let statusEx = String(r['Status'] || "").toLowerCase();
-            return (noEx === String(nomorUrut).trim()) && (jdlEx === String(judulKitab).trim()) && (statusEx.includes("dipinjam") || statusEx.includes("hilang"));
-        });
-
-        // Kelompokkan berdasarkan Nama Ustadz dan Statusnya
-        let mapStatusJilid = {};
-        recordTerkait.forEach(rec => {
-            let ustadz = rec['Nama Ustadz'];
-            let statusAsli = String(rec['Status'] || "").toLowerCase().includes("hilang") ? "Hilang" : "Pinjam"; 
-            let key = `${ustadz} ${statusAsli}`; // Contoh output: "Abu Rasyid Hilang"
-            
-            let jilidTeks = rec['Jilid Berapa'] || "";
-            if (!mapStatusJilid[key]) mapStatusJilid[key] = new Set();
-
-            if (jilidTeks.toLowerCase().includes("semua")) {
-                mapStatusJilid[key].add("Semua");
-            } else {
-                let angkas = (jilidTeks.match(/\d+/g) || []).map(Number);
-                angkas.forEach(a => mapStatusJilid[key].add(a));
-            }
-        });
-
-        // Rangkai teks akhir untuk ditulis di Excel Etalase
-        let statusFinalArray = [];
-        for (let key in mapStatusJilid) {
-            let setJilid = Array.from(mapStatusJilid[key]);
-            if (setJilid.includes("Semua")) {
-                statusFinalArray.push(`${key} (Semua Jilid)`);
-            } else {
-                let jilidUrut = setJilid.sort((a,b) => a-b);
-                if (jilidUrut.length > 0) {
-                    statusFinalArray.push(`${key} (Jilid ${jilidUrut.join(", ")})`);
-                }
-            }
-        }
-
-        let teksStatusFinal = statusFinalArray.join(" | ");
-
-        let namaKolomStatus = Object.keys(rowsEtalase[0] || {}).find(k => k.toLowerCase() === 'status') || 'status';
-        rowsEtalase[targetIndex][namaKolomStatus] = teksStatusFinal;
-        
-        workbook.Sheets[etalaseInduk] = XLSX.utils.json_to_sheet(rowsEtalase);
-    }
-}
 
         // 1. TAHAP VALIDASI KERANJANG & BUKA KOTAK PASSWORD
         function simpanKeranjangPinjam() {
@@ -5469,87 +5356,53 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
         }
 
         // 3. TAHAP FINAL: CEK PASSWORD & REKAM KE EXCEL
-        function prosesSimpanExcel() {
-            let pwd = document.getElementById('inputPasswordSimpan').value;
-            if (pwd !== "1526") { 
-                alert("Password salah! Akses ditolak.");
-                return;
-            }
-            
-            tutupPasswordSimpan(); // Tutup kotaknya jika benar
+        // FILE: index.html - GANTI FUNGSI prosesSimpanExcel()
+async function prosesSimpanExcel() {
+  let pwd = document.getElementById("inputPasswordSimpan").value;
+  if (pwd !== "1526") {
+    alert("Password salah! Akses ditolak.");
+    return;
+  }
 
-            const inputTglRaw = document.getElementById('inputTanggalPinjam').value;
-            const selectUstadz = document.getElementById('inputNamaUstadz');
-            const namaUstadz = selectUstadz ? selectUstadz.value : "-";
-            const tglPinjamObj = new Date(inputTglRaw);
-            const tglPinjamLokal = formatTanggalIndo(tglPinjamObj);
-            
-            const path = require('path');
-            const fs = require('fs');
-            const filePath = path.join(process.cwd(), 'database.xlsx');
+  tutupPasswordSimpan();
 
-            try {
-                const fileBuffer = fs.readFileSync(filePath);
-                const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-                
-                const sheetName = "Dipinjam Ustadz";
-                if (!workbook.Sheets[sheetName]) {
-                    alert("Sheet 'Dipinjam Ustadz' tidak ditemukan di dalam file database.xlsx!");
-                    return;
-                }
+  const inputTglRaw = document.getElementById("inputTanggalPinjam").value;
+  const selectUstadz = document.getElementById("inputNamaUstadz");
+  const namaUstadz = selectUstadz ? selectUstadz.value : "-";
+  const tglPinjamObj = new Date(inputTglRaw);
+  const tglPinjamLokal = formatTanggalIndo(tglPinjamObj);
+  const teksUpdateHariIni = "Update: " + formatTanggalIndo(new Date());
 
-                const worksheet = workbook.Sheets[sheetName];
-                let rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+  const payloadDaftarKitab = daftarKitabDipinjamForm.map((buku, idx) => ({
+    nomorUrut: buku.nomorUrut,
+    judul: buku.judul,
+    jilid: window.dataJilidUntukDisimpanTemp[idx],
+    etalase: buku.etalase
+  }));
 
-                let indexBarisUpdate = rows.findIndex(r => r['Nama Ustadz'] && r['Nama Ustadz'].toString().toLowerCase().includes('update:'));
-                let teksUpdateHariIni = "Update: " + formatTanggalIndo(new Date());
+  try {
+    await kirimKeGoogleSheets({
+      aksi: "tambahPinjam",
+      namaUstadz: namaUstadz,
+      tglPinjam: tglPinjamLokal,
+      teksUpdate: teksUpdateHariIni,
+      daftarKitab: payloadDaftarKitab
+    });
 
-                if (indexBarisUpdate !== -1) {
-                    rows[indexBarisUpdate]['Nama Ustadz'] = teksUpdateHariIni;
-                } else {
-                    rows.unshift({ "Nama Ustadz": teksUpdateHariIni });
-                }
+    alert("Berhasil! " + daftarKitabDipinjamForm.length + " kitab telah disimpan ke Google Sheets.");
 
-                // MASUKKAN DATA BARU KERANJANG
-                daftarKitabDipinjamForm.forEach((buku, idx) => {
-                    rows.push({
-                        "Nama Ustadz": namaUstadz,
-                        "Tanggal Pinjam": tglPinjamLokal,
-                        "Status": "Dipinjam",
-                        "Tanggal Kembali": "-",
-                        "mor urut kit": buku.nomorUrut,
-                        "judul kitab": buku.judul,
-                        "Jilid Berapa": window.dataJilidUntukDisimpanTemp[idx], 
-                        "Etalase, Rak": buku.etalase
-                    });
-                });
+    daftarKitabDipinjamForm = [];
+    renderTabelFormPinjam();
+    document.getElementById("inputCariKitabPinjam").value = "";
+    document.getElementById("inputTanggalPinjam").value = "";
+    tutupModalAdminTabel("pinjam");
 
-                // --- PANGGIL MESIN SINKRONISASI ETALASE DI SINI ---
-                daftarKitabDipinjamForm.forEach((buku) => {
-                    sinkronisasiStatusEtalase(workbook, rows, buku.etalase, buku.nomorUrut, buku.judul);
-                });
-
-                const newWorksheet = XLSX.utils.json_to_sheet(rows);
-                workbook.Sheets[sheetName] = newWorksheet;
-
-                const outBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-                fs.writeFileSync(filePath, outBuffer);
-
-                alert("Berhasil! " + daftarKitabDipinjamForm.length + " kitab telah direkam langsung ke Excel.");
-                
-                daftarKitabDipinjamForm = [];
-                renderTabelFormPinjam();
-                document.getElementById('inputCariKitabPinjam').value = '';
-                document.getElementById('inputTanggalPinjam').value = '';
-                tutupModalAdminTabel('pinjam');
-                
-                muatDataExcel(); 
-
-            } catch (error) {
-                console.error("Gagal menulis ke Excel:", error);
-                alert("Gagal menyimpan!\nError: " + error.message + "\n\nPastikan file 'database.xlsx' benar-benar tertutup dan tidak sedang dibuka di Microsoft Excel.");
-            }
-        }
+    await muatDataExcel();
+  } catch (error) {
+    console.error("Gagal menyimpan ke Google Sheets:", error);
+    alert("Gagal menyimpan ke Google Sheets!\nError: " + error.message);
+  }
+}
 
         // ================= MESIN PENGATUR NAMA USTADZ =================
         function tambahUstadzBaru() {
@@ -5596,12 +5449,12 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
             for (let i = 0; i < selectEl.options.length; i++) {
                 daftar.push(selectEl.options[i].value);
             }
-            localStorage.setItem('daftarUstadzAdmin', JSON.stringify(daftar));
+            safeLS.setItem('daftarUstadzAdmin', JSON.stringify(daftar));
         }
 
         function muatDaftarUstadz() {
             const selectEl = document.getElementById('inputNamaUstadz');
-            let daftarTersimpan = localStorage.getItem('daftarUstadzAdmin');
+            let daftarTersimpan = safeLS.getItem('daftarUstadzAdmin');
             
             if (daftarTersimpan) {
                 let daftar = JSON.parse(daftarTersimpan);
@@ -5745,7 +5598,7 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
             let listEl = document.getElementById('listStatusUbah');
             if(!listEl) return;
             
-            let statusCustom = JSON.parse(localStorage.getItem('daftarStatusCustom') || '[]');
+            let statusCustom = JSON.parse(safeLS.getItem('daftarStatusCustom') || '[]');
             let semuaStatus = [...statusBawaan, ...statusCustom];
             
             let html = '';
@@ -5780,7 +5633,7 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
             let statusBaru = prompt("Masukkan status lainnya:");
             if (statusBaru && statusBaru.trim() !== "") {
                 statusBaru = statusBaru.trim();
-                let statusCustom = JSON.parse(localStorage.getItem('daftarStatusCustom') || '[]');
+                let statusCustom = JSON.parse(safeLS.getItem('daftarStatusCustom') || '[]');
                 
                 if (statusBawaan.includes(statusBaru) || statusCustom.includes(statusBaru)) {
                     alert("Status ini sudah ada di daftar!");
@@ -5788,7 +5641,7 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
                 }
                 
                 statusCustom.push(statusBaru);
-                localStorage.setItem('daftarStatusCustom', JSON.stringify(statusCustom));
+                safeLS.setItem('daftarStatusCustom', JSON.stringify(statusCustom));
                 muatDaftarStatusUbah();
                 pilihStatusUbah(statusBaru); // Otomatis terpilih
             }
@@ -5798,9 +5651,9 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
             event.stopPropagation(); // Mencegah terklik saat menghapus
             let yakin = confirm(`Yakin ingin menghapus status "${status}" secara permanen?`);
             if (yakin) {
-                let statusCustom = JSON.parse(localStorage.getItem('daftarStatusCustom') || '[]');
+                let statusCustom = JSON.parse(safeLS.getItem('daftarStatusCustom') || '[]');
                 statusCustom = statusCustom.filter(s => s !== status);
-                localStorage.setItem('daftarStatusCustom', JSON.stringify(statusCustom));
+                safeLS.setItem('daftarStatusCustom', JSON.stringify(statusCustom));
                 
                 // Jika status yg dihapus sedang aktif, reset otomatis ke "Dipinjam"
                 if (document.getElementById('inputStatusUbahValue').value === status) {
@@ -5899,72 +5752,39 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
             setTimeout(() => document.getElementById('modalPasswordUbah').style.display = 'none', 300);
         }
 
-        function prosesFinalSimpanUbah() {
-            let pwd = document.getElementById('inputPasswordUbah').value;
-            if (pwd !== "1526") { alert("Password salah! Akses ditolak."); return; }
-            tutupPasswordUbah();
-            if (!dataPerubahanSementara) return;
+        // FILE: index.html - GANTI FUNGSI prosesFinalSimpanUbah()
+async function prosesFinalSimpanUbah() {
+  let pwd = document.getElementById("inputPasswordUbah").value;
+  if (pwd !== "1526") {
+    alert("Password salah! Akses ditolak.");
+    return;
+  }
+  tutupPasswordUbah();
+  if (!dataPerubahanSementara) return;
 
-            const path = require('path'); const fs = require('fs');
-            const filePath = path.join(process.cwd(), 'database.xlsx');
+  const tglHariIni = formatTanggalIndo(new Date());
+  const teksUpdateHariIni = "Update: " + tglHariIni;
+  const statusCek = dataPerubahanSementara.statusBaru.toLowerCase();
 
-            try {
-                const fileBuffer = fs.readFileSync(filePath);
-                const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-                const sheetName = "Dipinjam Ustadz";
-                if (!workbook.Sheets[sheetName]) { alert("Sheet tidak ditemukan!"); return; }
+  if ((statusCek.includes("kembali") || statusCek.includes("hilang")) && dataPerubahanSementara.tglInputIndo === "-") {
+    dataPerubahanSementara.tglInputIndo = tglHariIni;
+  }
 
-                const worksheet = workbook.Sheets[sheetName];
-                let rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+  try {
+    await kirimKeGoogleSheets({
+      aksi: "ubahPinjam",
+      teksUpdate: teksUpdateHariIni,
+      data: dataPerubahanSementara
+    });
 
-                let indexBarisUpdate = rows.findIndex(r => r['Nama Ustadz'] && r['Nama Ustadz'].toString().toLowerCase().includes('update:'));
-                let teksUpdateHariIni = "Update: " + formatTanggalIndo(new Date());
-                if (indexBarisUpdate !== -1) rows[indexBarisUpdate]['Nama Ustadz'] = teksUpdateHariIni;
-                else rows.unshift({ "Nama Ustadz": teksUpdateHariIni });
-
-                let targetIndex = rows.findIndex(r => 
-                    r['Nama Ustadz'] == dataPerubahanSementara.namaLama && r['judul kitab'] == dataPerubahanSementara.judul &&
-                    (r['mor urut kit'] == dataPerubahanSementara.noUrut || r['nomor urut kitab'] == dataPerubahanSementara.noUrut)
-                );
-
-                if (targetIndex !== -1) {
-                    rows[targetIndex]['Nama Ustadz'] = dataPerubahanSementara.namaBaru;
-                    rows[targetIndex]['Status'] = dataPerubahanSementara.statusBaru;
-                    rows[targetIndex]['Jilid Berapa'] = dataPerubahanSementara.jilidBaru;
-
-                    let statusCek = dataPerubahanSementara.statusBaru.toLowerCase();
-                    if (statusCek.includes("dipinjam")) {
-                        rows[targetIndex]['Tanggal Kembali'] = "-"; 
-                        if(dataPerubahanSementara.tglInputIndo !== "-") {
-                            rows[targetIndex]['Tanggal Pinjam'] = dataPerubahanSementara.tglInputIndo;
-                        }
-                    } else if (statusCek.includes("kembali")) {
-                        if(dataPerubahanSementara.tglInputIndo !== "-") {
-                            rows[targetIndex]['Tanggal Kembali'] = dataPerubahanSementara.tglInputIndo;
-                        } else {
-                            rows[targetIndex]['Tanggal Kembali'] = formatTanggalIndo(new Date());
-                        }
-                    } else if (statusCek.includes("hilang")) {
-                        rows[targetIndex]['Tanggal Kembali'] = formatTanggalIndo(new Date());
-                    }
-                } else {
-                    alert("Peringatan: Data asli tidak ditemukan di Excel."); return;
-                }
-
-                // --- PANGGIL MESIN SINKRONISASI ETALASE DI SINI ---
-                sinkronisasiStatusEtalase(workbook, rows, dataPerubahanSementara.rak, dataPerubahanSementara.noUrut, dataPerubahanSementara.judul);
-
-                const newWorksheet = XLSX.utils.json_to_sheet(rows);
-                workbook.Sheets[sheetName] = newWorksheet;
-                const outBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-                fs.writeFileSync(filePath, outBuffer);
-
-                alert("Perubahan berhasil disimpan dan direkam ke Excel!");
-                tutupModalAdminTabel('ubah'); muatDataExcel(); 
-            } catch (error) {
-                console.error(error); alert("Gagal menyimpan!\nError: " + error.message);
-            }
-        }
+    alert("Perubahan berhasil disimpan ke Google Sheets!");
+    tutupModalAdminTabel("ubah");
+    await muatDataExcel();
+  } catch (error) {
+    console.error(error);
+    alert("Gagal menyimpan perubahan!\nError: " + error.message);
+  }
+}
 
         // ==========================================
         // JEMBATAN PENGHUBUNG TABEL KE POPUP UBAH
@@ -5980,11 +5800,11 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
 
             // 2. Set Status (Custom Dropdown)
             let statusItem = item.status;
-            let statusCustom = JSON.parse(localStorage.getItem('daftarStatusCustom') || '[]');
+            let statusCustom = JSON.parse(safeLS.getItem('daftarStatusCustom') || '[]');
             
             if (!statusBawaan.includes(statusItem) && !statusCustom.includes(statusItem)) {
                 statusCustom.push(statusItem);
-                localStorage.setItem('daftarStatusCustom', JSON.stringify(statusCustom));
+                safeLS.setItem('daftarStatusCustom', JSON.stringify(statusCustom));
             }
             
             muatDaftarStatusUbah(); // Membangun daftar
@@ -6287,66 +6107,6 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
             }, langkahWaktu);
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const tabs = document.querySelectorAll('.etalase-tab');
-            const rows = document.querySelectorAll('#tabel-hilang tbody tr');
-            
-            // Ambil header kolom ke-3
-            const headerRak = document.querySelector('#tabel-hilang thead th:nth-child(3)') || document.querySelector('#tabel-hilang th:nth-child(3)');
-
-            // 1. Simpan huruf Rak asli (B, C, D) ke dalam memori (data-rak) agar tidak hilang saat teks diubah
-            rows.forEach(row => {
-                const cell = row.querySelector('td:nth-child(3)');
-                if (cell && !row.hasAttribute('data-rak')) {
-                    row.setAttribute('data-rak', cell.textContent.trim());
-                }
-            });
-
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    // Pindahkan status active
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-
-                    const filterValue = tab.getAttribute('data-filter');
-
-                    // 2. Ubah Teks Judul Kolom (Header)
-                    if (headerRak) {
-                        headerRak.textContent = (filterValue === 'all') ? 'Etalase / Rak' : 'Rak';
-                    }
-
-                    // 3. Filter Baris & Ubah Teks Sel
-                    rows.forEach(row => {
-                        const rowEtalase = row.getAttribute('data-etalase'); // Mengambil angka 1, 2, 3.. dari <tr>
-                        const cell = row.querySelector('td:nth-child(3)');
-                        const nilaiRakAsli = row.getAttribute('data-rak'); // Mengambil huruf B, C, D..
-
-                        if (filterValue === 'all') {
-                            row.style.display = ''; // Tampilkan semua
-                            if (cell && rowEtalase) {
-                                // Gabungkan nama etalase dan rak
-                                cell.textContent = `Etalase ${rowEtalase} / Rak ${nilaiRakAsli}`;
-                            }
-                        } else {
-                            // Jika tab cocok dengan asal etalase baris
-                            if (rowEtalase === filterValue) {
-                                row.style.display = ''; 
-                                if (cell) {
-                                    // Kembalikan teks hanya jadi huruf Rak
-                                    cell.textContent = nilaiRakAsli;
-                                }
-                            } else {
-                                row.style.display = 'none'; // Sembunyikan yang tidak cocok
-                            }
-                        }
-                    });
-                });
-            });
-            
-            // 4. Otomatis klik tab "Semua" saat halaman pertama kali dibuka agar formatnya langsung menyesuaikan
-            const tabSemua = document.querySelector('.etalase-tab[data-filter="all"]');
-            if (tabSemua) tabSemua.click();
-        });
 
         // ==========================================
         // MESIN REVIEW & PEMBUAT FILE DOKUMEN
@@ -6551,45 +6311,70 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
             }
         });
 
-        // Menampilkan preview gambar yang dipilih secara instan
-        function previewGambarSync(input, tipe) {
-            if (input.files && input.files[0]) {
-                // Ambil jalur (path) asli file di komputer (fitur khusus Desktop)
-                let localPath = input.files[0].path; 
-                
-                if (tipe === 'depan') pathFotoDepanTemp = localPath;
-                if (tipe === 'samping') pathFotoSampingTemp = localPath;
-                
-                // LANGSUNG pasang gambar ke layar detik itu juga!
-                if (tipe === 'depan') {
-                    setPreviewBackground('boxUploadDepanUtama', localPath, 'inputDepanUtama');
-                    setPreviewBackground('boxUploadDepanRev', localPath, 'inputDepan');
-                } else if (tipe === 'samping') {
-                    setPreviewBackground('boxUploadSampingUtama', localPath, 'inputSampingUtama');
-                    setPreviewBackground('boxUploadSampingRev', localPath, 'inputSamping');
-                }
-                
-                let btnEdit = document.getElementById('btnEditReview');
-                let btnSave = document.getElementById('btnSaveReview');
-                if (btnEdit) btnEdit.style.display = 'none';
-                if (btnSave) btnSave.style.display = 'inline-block';
+        // Kompres gambar jadi JPEG kecil (data URL) supaya muat di 1 sel Google Sheets (maks ~50.000 karakter)
+        function kompresGambarKeDataURL(file, maxSisi = 240, kualitas = 0.6) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = () => reject(new Error("Gagal membaca file gambar."));
+                reader.onload = () => {
+                    const img = new Image();
+                    img.onerror = () => reject(new Error("File bukan gambar yang valid."));
+                    img.onload = () => {
+                        let skala = Math.min(1, maxSisi / Math.max(img.width, img.height));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(img.width * skala));
+                        canvas.height = Math.max(1, Math.round(img.height * skala));
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', kualitas));
+                    };
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
 
-                // Lakukan auto-save di latar belakang
-                simpanReviewKitab(true); 
+        // Menampilkan preview gambar yang dipilih secara instan
+        async function previewGambarSync(input, tipe) {
+            if (!(input.files && input.files[0])) return;
+            let dataUrl;
+            try {
+                dataUrl = await kompresGambarKeDataURL(input.files[0]);
+            } catch (e) {
+                alert(e.message);
+                return;
             }
+            input.value = ''; // supaya file yang sama bisa dipilih ulang
+
+            if (tipe === 'depan') pathFotoDepanTemp = dataUrl;
+            if (tipe === 'samping') pathFotoSampingTemp = dataUrl;
+
+            if (tipe === 'depan') {
+                setPreviewBackground('boxUploadDepanUtama', dataUrl, 'inputDepanUtama');
+                setPreviewBackground('boxUploadDepanRev', dataUrl, 'inputDepan');
+            } else if (tipe === 'samping') {
+                setPreviewBackground('boxUploadSampingUtama', dataUrl, 'inputSampingUtama');
+                setPreviewBackground('boxUploadSampingRev', dataUrl, 'inputSamping');
+            }
+
+            // Auto-save foto di latar belakang
+            simpanReviewKitab(true);
         }
 
         function setPreviewBackground(boxId, srcUrl, inputId) {
             let box = document.getElementById(boxId);
-            if (!box) return; 
+            if (!box) return;
 
-            if (srcUrl) {
-                let safeUrl = srcUrl.replace(/\\/g, '/');
-                box.style.backgroundImage = `url("file:///${safeUrl}")`;
+            // Hanya data URL / http(s) yang bisa ditampilkan di browser (path lokal C:\... diabaikan)
+            let bisaDitampilkan = typeof srcUrl === 'string' && /^(data:image\/|https?:\/\/|blob:)/i.test(srcUrl);
+
+            if (bisaDitampilkan) {
+                box.style.backgroundImage = `url("${srcUrl}")`;
                 box.classList.add('ada-gambar');
-                
-                // Matikan klik otomatis, ganti dengan pop-up pilihan
-                box.onclick = function(e) {
+
+                box.onclick = function (e) {
                     e.preventDefault();
                     e.stopPropagation();
                     let pilihan = confirm("Foto sudah ada.\n\nKlik 'OK' jika ingin MENGGANTI foto.\nKlik 'Batal/Cancel' jika ingin MELIHAT foto.");
@@ -6597,253 +6382,88 @@ function sinkronisasiStatusEtalase(workbook, rowsDipinjam, etalaseLengkap, nomor
                         let input = document.getElementById(inputId);
                         if (input) input.click();
                     } else {
-                        let win = window.open();
-                        win.document.write(`<html><body style="margin:0; background:#222; display:flex; justify-content:center; align-items:center;"><img src="file:///${safeUrl}" style="max-width:100%; max-height:100vh;" /></body></html>`);
+                        let win = window.open('', '_blank');
+                        if (win) {
+                            win.document.body.style.cssText = 'margin:0; background:#222; display:flex; justify-content:center; align-items:center;';
+                            let img = win.document.createElement('img');
+                            img.src = srcUrl;
+                            img.style.cssText = 'max-width:100%; max-height:100vh;';
+                            win.document.body.appendChild(img);
+                        }
                     }
                 };
             } else {
                 box.style.backgroundImage = 'none';
                 box.classList.remove('ada-gambar');
-                box.onclick = function(e) {
+                box.onclick = function () {
                     let input = document.getElementById(inputId);
                     if (input) input.click();
                 };
             }
         }
 
-        // FUNGSI INTI: Menyimpan File, Dokumen .docx, & Update Excel Tanpa Error
-        function simpanReviewKitab(isAuto = false) {
+        // FUNGSI INTI: Menyimpan review (teks + foto) ke Google Sheets
+        async function simpanReviewKitab(isAuto = false) {
             let txtArea = document.getElementById('teksReviewInput');
+            if (!txtArea || !currentBookInfo) return;
 
-            // 1. PENGGUGUR 1: Bersihkan tag "hantu" (<p><br></p>) jika benar-benar kosong
+            // Bersihkan tag "hantu" jika editor benar-benar kosong
             if (txtArea.innerText.trim() === "") {
                 txtArea.innerHTML = "";
             }
+            let teksBaru = txtArea.innerHTML;
 
-            // =========================================================================
-        // SKRIP BARU: Wadah virtual untuk menjinakkan ukuran gambar
-        // =========================================================================
-        let tempDiv = document.createElement('div');
-        // Ambil HTML dari txtArea yang sudah dibersihkan oleh Penggugur 1 di atas
-        tempDiv.innerHTML = txtArea.innerHTML; 
-
-        // Jinakkan ukuran semua Gambar agar mentok margin (lanjutan skrip Anda sebelumnya)
-        let images = tempDiv.getElementsByTagName('img');
-        for (let i = 0; i < images.length; i++) {
-            // (Masukkan logika resize/korset gambar di sini sesuai skrip Anda sebelumnya)
-            // contoh: images[i].style.width = "100%"; dll...
-        }
-
-        // Masukkan hasil akhir (bersih dari tag hantu + gambar sudah jinak) ke variabel teksBaru
-        let teksBaru = tempDiv.innerHTML;
-
-        // =========================================================================
-
-            // 2. DETEKSI PERUBAHAN
+            // Deteksi perubahan
             let adaPerubahanTeks = (teksBaru !== (currentBookInfo.teksReview || ""));
             let adaFotoDepanBaru = (pathFotoDepanTemp && pathFotoDepanTemp !== (currentBookInfo.fotoDepan || ""));
             let adaFotoSampingBaru = (pathFotoSampingTemp && pathFotoSampingTemp !== (currentBookInfo.fotoSamping || ""));
 
-            // 3. PENGGUGUR 2: Jika dibiarkan kosong / tidak ada yang diubah sama sekali
-            if (!adaPerubahanTeks && !adaFotoDepanBaru && !adaFotoSampingBaru) {
-                // Langsung tutup mode edit tanpa menyimpan apapun!
-                document.getElementById('editorToolbar').style.display = 'none';
-                
+            const kembalikanUI = () => {
+                let btnEdit = document.getElementById('btnEditReview');
+                let btnSave = document.getElementById('btnSaveReview');
+                let toolbar = document.getElementById('editorToolbar');
+                if (toolbar) toolbar.style.display = 'none';
                 txtArea.setAttribute('contenteditable', 'false');
                 txtArea.style.borderTopLeftRadius = '12px';
                 txtArea.style.borderTopRightRadius = '12px';
                 txtArea.style.background = '#f9f9f9';
-                
-                document.getElementById('btnSaveReview').style.display = 'none';
-                document.getElementById('btnEditReview').style.display = 'inline-block';
-                
-                return; // BERHENTI DI SINI (Gugurkan)
-            }
-
-            // --- JIKA ADA PERUBAHAN, LANJUTKAN PROSES SIMPAN ---
-            const fs = require('fs');
-            const path = require('path');
-
-            let etalaseFolder = currentBookInfo.etalase.split(" (")[0]; 
-            let targetFolder = path.join(process.cwd(), 'Review Kitab', etalaseFolder);
-            
-            if (!fs.existsSync(targetFolder)){
-                fs.mkdirSync(targetFolder, { recursive: true });
-            }
-            
-            // --- KODE BARU: FORMAT NAMA FILE (No Judul - Penulis - Cetakan) ---
-            let jdl = (currentBookInfo.judul_latin && currentBookInfo.judul_latin !== "-") ? currentBookInfo.judul_latin : currentBookInfo.judul;
-            let pnl = (currentBookInfo.penulis_latin && currentBookInfo.penulis_latin !== "-") ? currentBookInfo.penulis_latin : currentBookInfo.penulis;
-            let ctk = (currentBookInfo.cetakan_latin && currentBookInfo.cetakan_latin !== "-") ? currentBookInfo.cetakan_latin : currentBookInfo.cetakan;
-
-            // Bersihkan karakter ilegal Windows
-            let jdlAman = jdl.replace(/[<>:"/\\|?*]+/g, '').trim();
-            let pnlAman = pnl.replace(/[<>:"/\\|?*]+/g, '').trim();
-            let ctkAman = ctk.replace(/[<>:"/\\|?*]+/g, '').trim();
-
-            // Gabungkan format nama: Nomor (spasi) Judul - Penulis - Cetakan
-            let namaFileBase = `${currentBookInfo.nomorUrut} ${jdlAman} - ${pnlAman} - ${ctkAman}`;
-            
-            // SOLUSI LIMIT: Naikkan batas maksimal menjadi 150 karakter. 
-            // 80 karakter terlalu pendek, sedangkan Windows mampu menampung hingga 255 karakter.
-            if (namaFileBase.length > 150) {
-                namaFileBase = namaFileBase.substring(0, 150).trim();
-                
-                // Opsional: Hapus tanda strip gantung jika kebetulan terpotong tepat di tanda strip
-                if (namaFileBase.endsWith('-')) {
-                    namaFileBase = namaFileBase.slice(0, -1).trim();
-                }
-            }
-            // -------------------------------------------------------------
-            
-            // ... (kode penentuan targetFolder dan namaFileBase tetap di atas) ...
-            
-            let finalPathDepan = currentBookInfo.fotoDepan || "";
-            let finalPathSamping = currentBookInfo.fotoSamping || "";
-            
-            try {
-                // 1. Proses Simpan Gambar
-                if (pathFotoDepanTemp && fs.existsSync(pathFotoDepanTemp) && !pathFotoDepanTemp.includes('Review Kitab')) {
-                    let ext = path.extname(pathFotoDepanTemp);
-                    finalPathDepan = path.join(targetFolder, `${namaFileBase} Depan${ext}`);
-                    fs.copyFileSync(pathFotoDepanTemp, finalPathDepan);
-                    currentBookInfo.fotoDepan = finalPathDepan;
-                }
-                
-                if (pathFotoSampingTemp && fs.existsSync(pathFotoSampingTemp) && !pathFotoSampingTemp.includes('Review Kitab')) {
-                    let ext = path.extname(pathFotoSampingTemp);
-                    finalPathSamping = path.join(targetFolder, `${namaFileBase} Samping${ext}`);
-                    fs.copyFileSync(pathFotoSampingTemp, finalPathSamping);
-                    currentBookInfo.fotoSamping = finalPathSamping;
-                }
-                
-                // 2. Proses Simpan Dokumen Word
-                
-                // --- Ambil Data Wafat Penulis ---
-                let wafat = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[hapusHarakat(currentBookInfo.penulis)] : "";
-                let wafatTeks = (wafat && wafat !== "-" && wafat !== "?" && wafat !== "9999") 
-                                ? (wafat === "معاصر" ? "Mu'ashir (Kontemporer)" : `${wafat} H`) 
-                                : "Tidak diketahui";
-
-                let docPath = path.join(targetFolder, `${namaFileBase}.doc`);
-                let htmlDoc = `
-                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-                <head><meta charset="utf-8">
-                    <title>Review Kitab</title>
-                    <style>
-                        /* SUNTIKAN CSS KHUSUS UNTUK MS WORD */
-                        .review-body p, .review-body div {
-                            text-indent: 36px; /* Membuat baris pertama menjorok ke dalam (First-line indent) */
-                            text-align: justify; /* Opsional: Agar teks rata kiri-kanan rapi */
-                        }
-
-                        /* --- SUNTIKAN FONT ARAB (KITAB) KHUSUS MS WORD --- */
-                        .font-arab {
-                            font-family: 'Traditional Arabic', 'Sakkal Majalla', 'Amiri', serif !important;
-                            font-size: 14pt; /* Ukuran huruf arab (perbesar jika kurang) */
-                            
-                        }
-                        /* Tabel Info di Word */
-                        .info-table {
-                            font-family: Arial, sans-serif;
-                            font-size: 14px;
-                            margin-bottom: 15px;
-                            border-collapse: collapse;
-                        }
-                        .info-table td {
-                            padding: 3px 8px 3px 0;
-                            vertical-align: top;
-                        }
-
-                        /* --- KODE BARU: Menghilangkan Space After Paragraph KHUSUS DI TABEL --- */
-                        .info-table td, .info-table p, .info-table div, .info-table span {
-                            margin: 0 !important;
-                            margin-bottom: 0 !important;
-                            margin-top: 0 !important;
-                            padding-bottom: 0 !important;
-                        }
-                        /* ----------------------------------------------------------------- */
-                        
-                    </style>
-                    </head>
-                <body style="font-family: Arial, sans-serif;">
-                    <h2>Review Kitab: <span class="font-arab">${currentBookInfo.judul}</span></h2>
-                    
-                    <!-- INFO LENGKAP KITAB -->
-                    <table class="info-table">
-                        <tr><td><b>Penulis</b></td><td>:</td><td class="font-arab">${currentBookInfo.penulis}</td></tr>
-                        <tr><td><b>Tahun Wafat</b></td><td>:</td><td>${wafatTeks}</td></tr>
-                        <tr><td><b>Cetakan</b></td><td>:</td><td class="font-arab">${currentBookInfo.cetakan}</td></tr>
-                        <tr><td><b>Bidang</b></td><td>:</td><td>${currentBookInfo.bidang}</td></tr>
-                    </table>
-                    
-                    <hr>
-
-                    <!-- PERBAIKAN GAMBAR: Menggunakan Tabel agar MS Word merender rapi berdampingan & proporsional -->
-                    ${finalPathDepan && fs.existsSync(finalPathDepan) ? `<img src="file:///${finalPathDepan.replace(/\\/g, '/')}" width="300" height="200" style="margin-right: 20px; display:inline-block;">` : ''}
-                    ${finalPathSamping && fs.existsSync(finalPathSamping) ? `<img src="file:///${finalPathSamping.replace(/\\/g, '/')}" width="300" height="200" style="display:inline-block;">` : ''}
-                    
-                    <div class="review-body" style="font-size: 14px; line-height: 1.6; margin-top: 20px;">${teksBaru}</div>
-                </body>
-                </html>`;
-                
-                // Sekarang proses ini aman karena dilindungi try...catch
-                fs.writeFileSync(docPath, htmlDoc, 'utf8');
-                
-                // 3. Proses Simpan Excel
-                const filePathExcel = path.join(process.cwd(), 'database.xlsx');
-                const fileBuffer = fs.readFileSync(filePathExcel);
-                const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-                const worksheet = workbook.Sheets[etalaseFolder]; 
-                
-                if (worksheet) {
-                    let rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                    let targetIndex = rows.findIndex(r => {
-                        let noExcel = String(r['nomor urut'] || r['Nomor Urut'] || r['mor urut kit'] || "").trim();
-                        let noApp = String(currentBookInfo.nomorUrut).trim();
-                        let jdlExcel = String(r['judul kitab'] || r['Judul Kitab'] || "").trim();
-                        let jdlApp = String(currentBookInfo.judul).trim();
-                        return (noExcel === noApp) && (jdlExcel === jdlApp);
-                    });
-                    
-                    if (targetIndex !== -1) {
-                        rows[targetIndex]['depan'] = finalPathDepan;
-                        rows[targetIndex]['samping'] = finalPathSamping;
-                        rows[targetIndex]['teks review'] = teksBaru;
-                        
-                        const newWorksheet = XLSX.utils.json_to_sheet(rows);
-                        workbook.Sheets[etalaseFolder] = newWorksheet;
-                        const outBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-                        fs.writeFileSync(filePathExcel, outBuffer);
-                        currentBookInfo.teksReview = teksBaru;
-                    }
-                }
-
-                // 4. Kembalikan UI
-                let btnEdit = document.getElementById('btnEditReview');
-                let btnSave = document.getElementById('btnSaveReview');
-                txtArea = document.getElementById('teksReviewInput');
-                let toolbar = document.getElementById('editorToolbar');
-                
-                if (toolbar) toolbar.style.display = 'none';
-                if (txtArea) {
-                    txtArea.setAttribute('contenteditable', 'false');
-                    txtArea.style.borderTopLeftRadius = '12px';
-                    txtArea.style.borderTopRightRadius = '12px';
-                    txtArea.style.background = '#f9f9f9';
-                }
                 if (btnSave) btnSave.style.display = 'none';
                 if (btnEdit) btnEdit.style.display = 'inline-block';
+            };
 
+            // Tidak ada yang berubah -> langsung tutup mode edit
+            if (!adaPerubahanTeks && !adaFotoDepanBaru && !adaFotoSampingBaru) {
+                kembalikanUI();
+                return;
+            }
+
+            let etalaseFolder = currentBookInfo.etalase.split(" (")[0];
+            let finalPathDepan = pathFotoDepanTemp || currentBookInfo.fotoDepan || "";
+            let finalPathSamping = pathFotoSampingTemp || currentBookInfo.fotoSamping || "";
+
+            try {
+                await kirimKeGoogleSheets({
+                    aksi: "simpanReview",
+                    etalase: etalaseFolder,
+                    nomorUrut: currentBookInfo.nomorUrut,
+                    judul: currentBookInfo.judul,
+                    fotoDepan: finalPathDepan,
+                    fotoSamping: finalPathSamping,
+                    teksReview: teksBaru
+                });
+
+                currentBookInfo.teksReview = teksBaru;
+                currentBookInfo.fotoDepan = finalPathDepan;
+                currentBookInfo.fotoSamping = finalPathSamping;
+
+                kembalikanUI();
                 if (isAuto !== true) {
                     alert("Review dan Gambar berhasil disimpan!");
                 }
-
             } catch (err) {
-                // Notifikasi Error Muncul di Sini Jika Dokumen Terkunci
                 console.error("Gagal simpan:", err);
                 if (isAuto !== true) {
-                    alert("GAGAL MENYIMPAN!\n\nPastikan file dokumen (.doc) atau Excel (.xlsx) untuk kitab ini TIDAK SEDANG TERBUKA di aplikasi lain (seperti MS Word).\nTutup dulu aplikasinya, lalu coba klik simpan lagi.");
+                    alert("GAGAL MENYIMPAN ke Google Sheets!\n\n" + (err && err.message ? err.message : err) + "\n\nPeriksa koneksi internet lalu coba lagi.");
                 }
             }
         }
@@ -6937,7 +6557,9 @@ function setArahTeks(arah) {
         }
 
         // 4. Pasang "Mata-mata" di Editor untuk terus memantau kursor
-        window.addEventListener('load', () => {
+        // FILE: index.html - TAMBAHKAN } TEPAT DI ATAS BARIS 6854
+
+window.addEventListener('load', () => {
             const editor = document.getElementById('teksReviewInput');
             if (editor) {
                 editor.addEventListener('keyup', updateToolbarState);   
@@ -6951,10 +6573,11 @@ function setArahTeks(arah) {
                     let pasteHTML = (e.originalEvent || e).clipboardData.getData('text/html');
                     let pasteText = (e.originalEvent || e).clipboardData.getData('text/plain');
                     
-                    if (pasteHTML) {
-                        // Pra-pembersihan
-                        pasteHTML = pasteHTML.replace(/<!--[\s\S]*?-->/gi, '');
-                        pasteHTML = pasteHTML.replace(/<o:p>.*?<\/o:p>/gi, '');
+                    // FILE: index.html - GANTI BARIS 6871 SAMPAI 6875 DENGAN INI
+if (pasteHTML) {
+  // Pra-pembersihan
+  pasteHTML = pasteHTML.replace(new RegExp('\\x3C!--[\\s\\S]*?--\\x3E', 'gi'), '');
+  pasteHTML = pasteHTML.replace(new RegExp('\\x3Co:p\\x3E.*?\\x3C/o:p\\x3E', 'gi'), '');
 
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(pasteHTML, 'text/html');
