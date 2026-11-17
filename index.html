@@ -2158,6 +2158,49 @@
         @media (max-width: 768px) {
             .sticky-header-etalase, .rak-title { position: static !important; }
         }
+
+        /* =====================================================================
+           SENTUHAN: tanpa kotak biru bawaan browser (ripple buatan kita yang tampil),
+           tanpa tunda tap, dan elemen menu tidak ikut ter-blok saat ditekan lama
+           ===================================================================== */
+        *, *::before, *::after { -webkit-tap-highlight-color: transparent; }
+        html { touch-action: manipulation; }
+        .nav-item, .home-card, .etalase-box, .accordion-header, .sort-tab, .etalase-tab, .side-item,
+        .btn-back, .btn-back-info, .close-btn, .sidebar-trigger, .penulis-item, .item-kitab-grup, button {
+            -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+        }
+
+        /* TABLET (lebar 769-1000px): tabel Dipinjam/Hilang tidak boleh lebih lebar dari header yang menempel */
+        @media (min-width: 769px) and (max-width: 1000px) {
+            #tabel-dipinjam th, #tabel-hilang th,
+            #tabel-dipinjam td, #tabel-hilang td { padding: 8px 5px !important; font-size: 0.9rem !important; overflow-wrap: anywhere; }
+        }
+
+        /* =====================================================================
+           SENTUHAN HP: tanpa kotak biru bawaan browser (efek ripple tetap jalan)
+           ===================================================================== */
+        html, body, * { -webkit-tap-highlight-color: transparent; }
+        a, button, [onclick], .nav-item, .home-card, .etalase-box, .accordion-header { touch-action: manipulation; }
+
+        /* =====================================================================
+           TABEL PINJAM & HILANG: lebarnya dikunci sama dengan kotak halaman, jadi tidak
+           bisa menyembul keluar dari header yang menempel (sumber "kebocoran" di kanan)
+           ===================================================================== */
+        @media (max-width: 1100px) {
+            #tabel-dipinjam, #tabel-hilang { table-layout: fixed !important; width: 100% !important; max-width: 100%; }
+            #tabel-dipinjam th, #tabel-dipinjam td, #tabel-hilang th, #tabel-hilang td {
+                overflow-wrap: anywhere; padding-left: 6px !important; padding-right: 6px !important;
+            }
+            #tabel-dipinjam th:nth-child(1) { width: 17%; }
+            #tabel-dipinjam th:nth-child(2) { width: 13%; }
+            #tabel-dipinjam th:nth-child(3) { width: 12%; }
+            #tabel-dipinjam th:nth-child(4) { width: 12%; }
+            #tabel-dipinjam th:nth-child(5) { width: 9%; }
+            #tabel-dipinjam th:nth-child(6) { width: 17%; }
+            #tabel-dipinjam th:nth-child(7) { width: 9%; }
+            #tabel-dipinjam th:nth-child(8) { width: 11%; }
+            #dipinjam, #hilang { overflow-x: clip; }
+        }
     </style>
 </head>
 <body>
@@ -3206,7 +3249,8 @@
         // ==========================================
         // EFEK RIPPLE KLIK GLOBAL (MODERN UI)
         // ==========================================
-        document.addEventListener('mousedown', function (e) {
+        document.addEventListener('pointerdown', function (e) {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
             // 1. Daftar class elemen yang akan mendapatkan efek Ripple saat diklik
             const target = e.target.closest('.nav-item, .home-card, .etalase-box, button, .btn-ris, .btn-ekspor-ris, .btn-upload-auto, .sort-tab, .etalase-tab, .side-item, .accordion-header, .result-table tbody td, .close-btn, .btn-back, .btn-back-info, .sidebar-trigger, .mode-option, .dropdown-header, .btn-tele-biasa, .item-kitab-grup, .search-mode-selected, .penulis-item');
 
@@ -3259,6 +3303,12 @@
             }
         });
         
+        // Jari ternyata menggulir halaman (browser membatalkan pointer): hapus gelombang supaya tidak berkedip saat scroll
+        document.addEventListener('pointercancel', function (e) {
+            const target = e.target && e.target.closest ? e.target.closest('*') : null;
+            document.querySelectorAll('.ripple').forEach(r => r.remove());
+        });
+
         document.addEventListener("DOMContentLoaded", () => {
             // Matikan sementara agar tidak mengganggu coding        
         });
