@@ -195,11 +195,13 @@
         }
 
         /* Gambar latar sebagai layer tetap sendiri (jauh lebih ringan daripada background-attachment: fixed) */
+        body { background-color: transparent; } /* warna dasar ada di <html>; kalau body solid, logo di belakangnya tertutup */
+        body::before { display: none !important; } /* lapisan lama yang selama ini tertutup warna body */
         body::after {
             content: '';
             position: fixed;
             inset: 0;
-            z-index: -2;
+            z-index: -1;
             pointer-events: none;
             background-image: url('image_71547e.png');
             background-size: 650px auto;
@@ -1919,12 +1921,11 @@
         }
 
         @media (max-width: 768px) {
-            html, body { overflow-x: hidden; }
             .section-container { padding: 18px 12px 40px; }
 
             /* --- NAVBAR: satu baris, tab bisa digeser --- */
             .navbar { padding: 6px 10px 4px; gap: 8px; }
-            .nav-left { flex: 1 1 auto; min-width: 0; gap: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+            .nav-left { flex: 1 1 auto; min-width: 0; gap: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 12px; margin-bottom: -12px; }
             .nav-left::-webkit-scrollbar { display: none; }
             .nav-links { gap: 0; flex-shrink: 0; }
             .nav-item { font-size: 0.95rem; padding: 13px 9px 8px; white-space: nowrap; }
@@ -1987,6 +1988,71 @@
             .rev-info #revPenulis { font-size: 1.05rem !important; }
             #teksReviewInput { min-height: 220px; padding: 14px !important; }
             #editorToolbar { padding: 6px 8px !important; }
+
+            /* --- DAFTAR BIDANG: rata tengah, ukuran pas --- */
+            .bidang-item { display: block; font-size: 1.05rem; letter-spacing: 0.5px; padding: 10px 12px; text-align: center; line-height: 1.35; }
+            .bidang-item:hover { transform: none; }
+
+            /* --- HEADER DETAIL (bidang & etalase): judul di tengah, tidak menabrak panah --- */
+            .sticky-header-bidang, .sticky-header-etalase { padding: 10px 44px; min-height: 40px; box-sizing: border-box; }
+            .sticky-header-bidang .btn-back, .sticky-header-etalase .btn-back { left: 6px; font-size: 1.5rem; }
+            #judul-detail-bidang, #judul-detail-etalase { font-size: 1.1rem !important; line-height: 1.3; text-align: center; letter-spacing: 0; }
+
+            /* --- JUDUL & TAB HALAMAN "HILANG" --- */
+            #hilang .search-header h2 { font-size: 1.3rem !important; line-height: 1.3; }
+            #hilang .sticky-search-container { padding-top: 12px !important; padding-bottom: 8px !important; }
+            .etalase-tabs { gap: 6px; margin-top: 10px; }
+            .etalase-tab { padding: 5px 11px; font-size: 0.8rem; }
+
+            /* --- TABEL: muat di lebar layar, teks boleh turun baris --- */
+            .result-table { width: 100%; table-layout: auto; }
+            .result-table th { background: var(--bg-color) !important; white-space: normal !important; font-size: 0.7rem; line-height: 1.25; padding: 7px 3px; }
+            .result-table td { font-size: 0.74rem; line-height: 1.4; padding: 7px 3px; overflow-wrap: break-word; }
+            .result-table .font-arab, .result-table td.font-arab { font-size: 0.95rem; line-height: 1.5; }
+
+            /* --- TABEL DIPINJAM: 8 kolom tidak muat di HP, jadi tiap baris menjadi kartu --- */
+            #tabel-dipinjam, #tabel-dipinjam tbody { display: block; width: 100%; }
+            #tabel-dipinjam thead { display: none; }
+            #tableBodyDipinjam tr {
+                display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;
+                padding: 12px 14px !important; margin-bottom: 10px; position: relative;
+                border: 1px solid var(--border-color) !important; border-radius: 10px;
+                text-align: left !important; box-sizing: border-box;
+            }
+            #tableBodyDipinjam td {
+                display: block; padding: 0 !important; font-size: 0.9rem !important; line-height: 1.4;
+                text-align: left !important; overflow-wrap: anywhere; min-width: 0;
+            }
+            #tableBodyDipinjam td::before {
+                display: block; font-size: 0.68rem; font-weight: 600; color: var(--brown-light);
+                margin-bottom: 1px; letter-spacing: 0.3px;
+            }
+            #tableBodyDipinjam td:nth-child(1)::before { content: "Nama Ustadz"; }
+            #tableBodyDipinjam td:nth-child(2)::before { content: "Tgl Pinjam"; }
+            #tableBodyDipinjam td:nth-child(3)::before { content: "Status"; }
+            #tableBodyDipinjam td:nth-child(4)::before { content: "Tgl Kembali"; }
+            #tableBodyDipinjam td:nth-child(5)::before { content: "No. Urut Kitab"; }
+            #tableBodyDipinjam td:nth-child(6)::before { content: "Judul Kitab"; }
+            #tableBodyDipinjam td:nth-child(7)::before { content: "Jilid"; }
+            #tableBodyDipinjam td:nth-child(8)::before { content: "Etalase / Rak"; }
+            #tableBodyDipinjam td:nth-child(1), #tableBodyDipinjam td:nth-child(6) { grid-column: 1 / -1; }
+            #tableBodyDipinjam td:nth-child(1) { font-size: 1rem !important; padding-right: 28px !important; }
+            #tableBodyDipinjam td.font-arab { font-size: 1.15rem !important; line-height: 1.6; text-align: right !important; }
+            #tableBodyDipinjam td.font-arab::before { text-align: left; }
+            #tableBodyDipinjam td[colspan] { grid-column: 1 / -1; text-align: center !important; }
+            #tableBodyDipinjam td[colspan]::before { content: none; }
+            #tableBodyDipinjam td.admin-action { position: absolute; top: 10px; right: 12px; padding: 0 !important; }
+            #tableBodyDipinjam td.admin-action::before { content: none; }
+
+            /* --- POSISI STICKY: tinggi sebenarnya diukur JS (aturStickyHP) --- */
+            .sticky-search-container, .sticky-header-bidang, .sticky-header-etalase { top: var(--nav-h, 50px); }
+            .accordion-header { top: calc(var(--nav-h, 50px) + var(--h-etalase, 45px)); }
+            .rak-title { top: calc(var(--nav-h, 50px) + var(--h-etalase, 45px) + var(--h-acc, 40px)); }
+            #detail-etalase .result-table th { top: calc(var(--nav-h, 50px) + var(--h-etalase, 45px) + var(--h-acc, 40px) + var(--h-rak, 40px)) !important; }
+            #tabel-bidang th { top: calc(var(--nav-h, 50px) + var(--h-bidang, 50px)) !important; }
+            #kitab .result-table th { top: calc(var(--nav-h, 50px) + var(--h-kitab, 105px)) !important; }
+            #tabel-dipinjam th { top: calc(var(--nav-h, 50px) + var(--h-pinjam, 70px)) !important; }
+            #tabel-hilang th { top: calc(var(--nav-h, 50px) + var(--h-hilang, 130px)) !important; }
         }
 
         @media (max-width: 380px) {
@@ -6955,6 +7021,38 @@ function filterTahunWafatCepat() {
             if (item) item.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
         }
         document.addEventListener('click', () => setTimeout(gulirTabAktif, 400));
+
+        // HP: ukur tinggi header yang menempel, supaya tumpukan sticky selalu pas (tinggi di HP beda dengan desktop)
+        function aturStickyHP() {
+            const root = document.documentElement.style;
+            const VARS = ['--nav-h', '--h-kitab', '--h-bidang', '--h-etalase', '--h-acc', '--h-rak', '--h-pinjam', '--h-hilang'];
+            if (window.innerWidth > 768) { VARS.forEach(v => root.removeProperty(v)); return; }
+            const ukur = (sel) => {
+                const e = Array.from(document.querySelectorAll(sel)).find(x => x.offsetParent !== null);
+                return e ? Math.floor(e.getBoundingClientRect().height) : 0;
+            };
+            const set = (v, n) => { if (n > 0 && root.getPropertyValue(v) !== n + 'px') root.setProperty(v, n + 'px'); };
+            const nav = document.getElementById('topNavbar');
+            if (nav && nav.offsetParent !== null) set('--nav-h', Math.floor(nav.getBoundingClientRect().height) - 1);
+            set('--h-kitab',    ukur('#kitab .sticky-search-container') - 1);
+            set('--h-bidang',   ukur('.sticky-header-bidang') - 1);
+            set('--h-etalase',  ukur('.sticky-header-etalase') - 1);
+            set('--h-acc',      ukur('.accordion-header') - 1);
+            set('--h-rak',      ukur('.rak-title') - 1);
+            set('--h-pinjam',   ukur('#header-publik-dipinjam, #header-admin-dipinjam') - 1);
+            set('--h-hilang',   ukur('#hilang .sticky-search-container') - 1);
+        }
+        (function () {
+            let antri = false;
+            const jadwal = () => { if (antri) return; antri = true; requestAnimationFrame(() => { antri = false; aturStickyHP(); }); };
+            window.addEventListener('resize', jadwal);
+            window.addEventListener('load', jadwal);
+            if (document.fonts && document.fonts.ready) document.fonts.ready.then(jadwal);
+            const app = document.getElementById('main-app');
+            if (app) new MutationObserver(jadwal).observe(app, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] });
+            document.addEventListener('click', () => { setTimeout(jadwal, 300); setTimeout(jadwal, 900); });
+            jadwal();
+        })();
     </script>
 </body>
 </html>
