@@ -2215,6 +2215,42 @@
             #tabel-dipinjam th:nth-child(8) { width: 11%; }
             #dipinjam, #hilang { overflow-x: clip; }
         }
+
+        /* =====================================================================
+           ROUND 6: panah info sejajar judul, garis navbar tidak menabrak header,
+           popup review rapi (panah tidak menabrak, kotak upload ukuran normal)
+           ===================================================================== */
+        .info-head { position: relative; display: flex; align-items: center; justify-content: center; min-height: 48px; }
+        .info-head .search-header { margin: 0; flex: 1 1 auto; text-align: center; }
+        .info-head .btn-back-info { position: absolute !important; left: -20px; top: 50% !important; transform: translateY(-50%); }
+        .info-head .btn-back-info:hover { transform: translate(-6px, -50%) scale(1.1); }
+
+        @media (max-width: 768px), (max-height: 520px) {
+            /* garis tab aktif berada DI DALAM navbar, bukan menggantung ke header di bawahnya */
+            .tab-indicator { bottom: 1px; }
+            .info-head { min-height: 42px; margin-bottom: 6px; }
+            .info-head .search-header { padding: 0 48px; }
+            .info-head .btn-back-info { left: 0; font-size: 1.6rem; width: 38px !important; height: 38px !important; }
+            .info-head .btn-back-info:hover { transform: translateY(-50%); }
+        }
+
+        /* Kolom gambar: tinggi sewajarnya, tidak ikut memanjang mengikuti teks review */
+        .rev-kanan { align-self: flex-start; }
+        .rev-kanan .btn-upload-auto { flex: 0 0 auto; }
+        @media (max-width: 768px) {
+            .rev-content .btn-back { width: 34px !important; height: 34px !important; font-size: 1.2rem !important; top: 10px !important; left: 12px !important; }
+            .rev-wrap { margin-top: 42px !important; }
+            .rev-kanan { align-self: stretch; }
+            .rev-kanan .btn-upload-auto { flex: 1 1 0; height: 96px; min-height: 96px !important; max-height: 96px; }
+        }
+        @media (max-height: 520px) {
+            .rev-content { padding: 8px 14px 12px 58px !important; }
+            .rev-content .btn-back { width: 34px !important; height: 34px !important; font-size: 1.2rem !important; top: 8px !important; left: 10px !important; }
+            .rev-wrap { margin-top: 0 !important; align-items: flex-start; }
+            .rev-kanan { width: 150px !important; flex-direction: column !important; align-self: flex-start; position: sticky; top: 0; }
+            .rev-kanan .btn-upload-auto { flex: 0 0 auto; height: 84px; min-height: 84px !important; max-height: 84px; }
+            #teksReviewInput { min-height: 120px; max-height: 40vh; }
+        }
     </style>
 </head>
 <body>
@@ -2732,9 +2768,10 @@
         <section id="info" class="section-container" style="position: relative;">
             
             <!-- Ikon Panah Kembali (Sesuai Backup dengan efek geser samping) -->
-            <i class="fa-solid fa-arrow-left btn-back-info" onclick="kembaliKeTabTerakhir()" title="Kembali"></i>
-
-            <div class="search-header font-serif"><h2>Informasi Maktabah</h2></div>
+            <div class="info-head fade-up" style="animation-delay: 0.1s;">
+                <i class="fa-solid fa-arrow-left btn-back-info" onclick="kembaliKeTabTerakhir()" title="Kembali"></i>
+                <div class="search-header font-serif"><h2>Informasi Maktabah</h2></div>
+            </div>
             
             <div class="persembahan-container" style="margin: 0 auto; text-align: center;">
                 
@@ -3450,6 +3487,11 @@
                     if(indicator) indicator.style.opacity = '1';
                 }
 
+                // Halaman detail (mis. detail-etalase) atau pemanggilan tanpa elemen: cari tab navbar yang sesuai, supaya garis tetap tampil
+                if (!tabElement && sectionId !== 'home' && sectionId !== 'info') {
+                    const kunci = (sectionId === 'detail-etalase') ? 'etalase' : sectionId;
+                    tabElement = Array.from(document.querySelectorAll('.navbar .nav-item')).find(i => (i.getAttribute('onclick') || '').includes("'" + kunci + "'")) || null;
+                }
                 if (indicator) {
                     if (tabElement) {
                         indicator.style.opacity = '1'; 
