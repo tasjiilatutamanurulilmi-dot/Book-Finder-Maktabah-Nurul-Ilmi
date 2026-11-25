@@ -3537,6 +3537,15 @@
         }
         let dataBuku = []; 
         let kamusWafatPenulis = {}; 
+        // Tampilan tahun wafat: angka diberi "H" (Hijriah); "معاصر" tetap; kosong/"-" tidak ditampilkan
+        function formatWafat(w) {
+            if (w === undefined || w === null) return "";
+            const t = String(w).trim();
+            if (t === "" || t === "-") return "";
+            if (t === "معاصر") return t;
+            if (/^\d+$/.test(t)) return t + " H";
+            return t;
+        }
         // Ambil HANYA teks tahun wafat dari kamus (kamus juga menyimpan info masyhur)
         function ambilWafat(nama) {
             if (typeof kamusWafatPenulis === 'undefined') return "";
@@ -4689,7 +4698,7 @@ if (sortPenulisSaatIni === 'wafat') {
                 wafatEl.className = '';
                 wafatEl.style.fontSize = '1rem';
             }
-            wafatEl.innerText = (wafat && wafat !== "-") ? wafat : "Tidak diketahui";
+            wafatEl.innerText = formatWafat(wafat) || "Tidak diketahui";
 
             // KUNCI PERBAIKAN AUTO-SAVE: Siapkan isi teks review di latar belakang 
             // agar Excel tidak me-reset teks review saat kita menyimpan gambar!
@@ -4836,7 +4845,7 @@ if (sortPenulisSaatIni === 'wafat') {
                 const dataBukuAman = encodeURIComponent(JSON.stringify(buku)).replace(/'/g, "%27");
                 
                 let wafat = ambilWafat(hapusHarakat(buku.penulis));
-                let infoWafat = wafat && wafat !== "-" ? `(Wafat: ${wafat})` : "";
+                let infoWafat = formatWafat(wafat) ? `(Wafat: ${formatWafat(wafat)})` : "";
 
                 // KUNCI: Cek apakah buku ini sedang dipinjam
                 const isDipinjam = cekBukuDipinjam(buku.judul, buku.etalase);
