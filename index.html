@@ -3546,10 +3546,18 @@
             if (/^\d+$/.test(t)) return t + " H";
             return t;
         }
+        // Kunci pencocokan nama penulis: tanpa harakat, tanpa karakter tak terlihat, spasi dirapikan
+        function kunciPenulis(teks) {
+            return hapusHarakat(teks)
+                .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u0640]/g, '')
+                .replace(/\u00A0/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
         // Ambil HANYA teks tahun wafat dari kamus (kamus juga menyimpan info masyhur)
         function ambilWafat(nama) {
             if (typeof kamusWafatPenulis === 'undefined') return "";
-            const d = kamusWafatPenulis[nama];
+            const d = kamusWafatPenulis[kunciPenulis(nama)];
             return (d && d.wafat !== undefined && d.wafat !== null) ? d.wafat : "";
         }
         let updateDataMap = {}; 
@@ -3679,12 +3687,18 @@ function prosesDataSheets(allSheetsData) {
       }
 
       // 3. TARIK DATA PENULIS
-      if (sheetName.toLowerCase() === "data penulis") {
+      if (sheetName.toLowerCase().replace(/\s+/g, " ").trim() === "data penulis") {
         rows.forEach(row => {
-          let nama = row["penulis"] ? row["penulis"].toString() : "";
-          nama = hapusHarakat(nama);
-          const wafat = row["tahun wafat"] || "";
-          const info = row["info"] ? row["info"].toString().trim() : "";
+          // Header dibaca tanpa peduli huruf besar/kecil dan spasi berlebih
+          const kolom = {};
+          Object.keys(row).forEach(k => { kolom[k.toString().toLowerCase().replace(/\s+/g, " ").trim()] = row[k]; });
+
+          const nama = kunciPenulis(kolom["penulis"] !== undefined && kolom["penulis"] !== null ? kolom["penulis"].toString() : "");
+          // Kolom wafat dikenali dari awal judulnya saja, jadi judul seperti "tahun wafat hijriah ..." tetap terbaca
+          const kunciWafat = Object.keys(kolom).find(k => k.startsWith("tahun wafat"));
+          const nilaiWafat = kunciWafat !== undefined ? kolom[kunciWafat] : undefined;
+          const wafat = (nilaiWafat !== undefined && nilaiWafat !== null) ? nilaiWafat : "";
+          const info = (kolom["info"] !== undefined && kolom["info"] !== null) ? kolom["info"].toString().trim() : "";
 
           if (nama) {
             kamusWafatPenulis[nama] = { wafat: wafat, info: info };
@@ -4246,7 +4260,7 @@ function clearTahun() {
 
                     if (!mapPenulis[namaBersih]) {
                         // Cek dengan aman apakah kamusWafatPenulis sudah di-load
-                        let dataPenulis = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[namaBersih] : null;
+                        let dataPenulis = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[kunciPenulis(namaAsli)] : null;
 let tahunWafatAsli = dataPenulis ? dataPenulis.wafat : "";
 let infoMasyhur = dataPenulis ? dataPenulis.info : ""; 
 let teksWafatFinal = "";
