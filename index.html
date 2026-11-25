@@ -3537,6 +3537,12 @@
         }
         let dataBuku = []; 
         let kamusWafatPenulis = {}; 
+        // Ambil HANYA teks tahun wafat dari kamus (kamus juga menyimpan info masyhur)
+        function ambilWafat(nama) {
+            if (typeof kamusWafatPenulis === 'undefined') return "";
+            const d = kamusWafatPenulis[nama];
+            return (d && d.wafat !== undefined && d.wafat !== null) ? d.wafat : "";
+        }
         let updateDataMap = {}; 
         
         // --- TAMBAHAN WADAH DATA BARU ---
@@ -4672,7 +4678,7 @@ if (sortPenulisSaatIni === 'wafat') {
             setPreviewBackground('boxUploadSampingUtama', pathFotoSampingTemp, 'inputSampingUtama');
 
             // 1. Ambil data Wafat Penulis
-            let wafat = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[hapusHarakat(currentBookInfo.penulis)] : "";
+            let wafat = ambilWafat(hapusHarakat(currentBookInfo.penulis));
             let wafatEl = document.getElementById('modalWafat');
             
             // KUNCI PERBAIKAN: Tambahkan String(wafat) agar angka tahun dari Excel tidak bikin crash!
@@ -4829,7 +4835,7 @@ if (sortPenulisSaatIni === 'wafat') {
                 // PERBAIKAN: Kirim seluruh objek buku secara langsung menggunakan JSON Stringify agar tidak tertukar
                 const dataBukuAman = encodeURIComponent(JSON.stringify(buku)).replace(/'/g, "%27");
                 
-                let wafat = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[hapusHarakat(buku.penulis)] : "";
+                let wafat = ambilWafat(hapusHarakat(buku.penulis));
                 let infoWafat = wafat && wafat !== "-" ? `(Wafat: ${wafat})` : "";
 
                 // KUNCI: Cek apakah buku ini sedang dipinjam
@@ -4882,7 +4888,7 @@ if (sortPenulisSaatIni === 'wafat') {
                 let ctk = (buku.cetakan_latin && buku.cetakan_latin !== "-") ? buku.cetakan_latin : buku.cetakan;
                 
                 // 1. Trik Tahun Wafat (Digabung ke nama agar muncul otomatis di Word)
-                let wafat = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[hapusHarakat(buku.penulis)] : "";
+                let wafat = ambilWafat(hapusHarakat(buku.penulis));
                 if (wafat && wafat !== "-" && wafat !== "?" && wafat !== "9999" && wafat !== "معاصر") {
                     pnl += ` (w. ${wafat} H)`;
                 }
@@ -4927,7 +4933,7 @@ if (sortPenulisSaatIni === 'wafat') {
             let ctk = (currentBookInfo.cetakan_latin && currentBookInfo.cetakan_latin !== "-") ? currentBookInfo.cetakan_latin : currentBookInfo.cetakan;
             
             // 1. Trik Tahun Wafat
-            let wafat = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[hapusHarakat(currentBookInfo.penulis)] : "";
+            let wafat = ambilWafat(hapusHarakat(currentBookInfo.penulis));
             if (wafat && wafat !== "-" && wafat !== "?" && wafat !== "9999" && wafat !== "معاصر") {
                 pnl += ` (w. ${wafat} H)`;
             }
@@ -6501,7 +6507,7 @@ async function prosesFinalSimpanUbah() {
             
             document.getElementById('revJudul').innerText = currentBookInfo.judul;
             // 1. Gabungkan Nama Penulis dengan Tahun Wafat di akhirnya (ujung kiri Arab)
-            let wafat = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[hapusHarakat(currentBookInfo.penulis)] : "";
+            let wafat = ambilWafat(hapusHarakat(currentBookInfo.penulis));
             let teksWafat = (wafat && wafat !== "-") ? (wafat === "معاصر" ? " (معاصر)" : ` (ت ${wafat} هـ)`) : "";
             document.getElementById('revPenulis').innerText = currentBookInfo.penulis + teksWafat;
             
