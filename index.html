@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maktabah Nurul Ilmi</title>
+    <!-- Deskripsi & tampilan saat link dibagikan (Telegram, WhatsApp, dll.) -->
+    <meta name="description" content="Pencarian kitab Maktabah Nurul Ilmi: cari kitab berdasarkan judul, penulis, bidang, etalase, dan cetakan.">
+    <link rel="canonical" href="https://maktabahnurulilmi.virt.my.id/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Maktabah Nurul Ilmi">
+    <meta property="og:title" content="Maktabah Nurul Ilmi">
+    <meta property="og:description" content="Pencarian kitab Maktabah Nurul Ilmi: cari kitab berdasarkan judul, penulis, bidang, etalase, dan cetakan.">
+    <meta property="og:url" content="https://maktabahnurulilmi.virt.my.id/">
+    <meta property="og:image" content="https://maktabahnurulilmi.virt.my.id/logo_enhanced_brown_1024.jpg">
+    <meta property="og:image:width" content="1024">
+    <meta property="og:image:height" content="1024">
+    <meta property="og:locale" content="id_ID">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Maktabah Nurul Ilmi">
+    <meta name="twitter:description" content="Pencarian kitab Maktabah Nurul Ilmi: cari kitab berdasarkan judul, penulis, bidang, etalase, dan cetakan.">
+    <meta name="twitter:image" content="https://maktabahnurulilmi.virt.my.id/logo_enhanced_brown_1024.jpg">
     <!-- Ikon: logo untuk tab & jendela aplikasi, .ico untuk shortcut/desktop Windows -->
     <link rel="icon" type="image/jpeg" href="logo_enhanced_brown_1024.jpg">
     <link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48" href="sticker1.ico">
@@ -3538,12 +3554,12 @@
         let dataBuku = []; 
         let kamusWafatPenulis = {}; 
         // Tampilan tahun wafat: angka diberi "H" (Hijriah); "معاصر" tetap; kosong/"-" tidak ditampilkan
-        function formatWafat(w) {
+        function formatWafat(w, masehi) {
             if (w === undefined || w === null) return "";
             const t = String(w).trim();
             if (t === "" || t === "-") return "";
             if (t === "معاصر") return t;
-            if (/^\d+$/.test(t)) return t + " H";
+            if (/^\d+$/.test(t)) return t + (masehi ? " M" : " H");
             return t;
         }
         // Kunci pencocokan nama penulis: tanpa harakat, tanpa karakter tak terlihat, spasi dirapikan
@@ -3553,6 +3569,12 @@
                 .replace(/\u00A0/g, ' ')
                 .replace(/\s+/g, ' ')
                 .trim();
+        }
+        // Apakah tahun wafat penulis ini berkalender Masehi (dari sheet "Data Penulis Latin")
+        function ambilMasehi(nama) {
+            if (typeof kamusWafatPenulis === 'undefined') return false;
+            const d = kamusWafatPenulis[kunciPenulis(nama)];
+            return !!(d && d.masehi === true);
         }
         // Ambil HANYA teks tahun wafat dari kamus (kamus juga menyimpan info masyhur)
         function ambilWafat(nama) {
@@ -3697,11 +3719,34 @@ function prosesDataSheets(allSheetsData) {
           // Kolom wafat dikenali dari awal judulnya saja, jadi judul seperti "tahun wafat hijriah ..." tetap terbaca
           const kunciWafat = Object.keys(kolom).find(k => k.startsWith("tahun wafat"));
           const nilaiWafat = kunciWafat !== undefined ? kolom[kunciWafat] : undefined;
-          const wafat = (nilaiWafat !== undefined && nilaiWafat !== null) ? nilaiWafat : "";
+          let wafat = (nilaiWafat !== undefined && nilaiWafat !== null) ? nilaiWafat : "";
+          if (wafat.toString().trim() === "") wafat = "-"; // penulis ada tapi tahun kosong = tidak diketahui
           const info = (kolom["info"] !== undefined && kolom["info"] !== null) ? kolom["info"].toString().trim() : "";
 
           if (nama) {
-            kamusWafatPenulis[nama] = { wafat: wafat, info: info };
+            kamusWafatPenulis[nama] = { wafat: wafat, info: info, masehi: false };
+          }
+        });
+        return;
+      }
+
+      // 3b. TARIK DATA PENULIS LATIN & MASEHI (sheet terpisah)
+      if (sheetName.toLowerCase().replace(/\s+/g, " ").trim() === "data penulis latin") {
+        rows.forEach(row => {
+          const kolom = {};
+          Object.keys(row).forEach(k => { kolom[k.toString().toLowerCase().replace(/\s+/g, " ").trim()] = row[k]; });
+
+          const nama = kunciPenulis(kolom["penulis"] !== undefined && kolom["penulis"] !== null ? kolom["penulis"].toString() : "");
+          const kunciWafat = Object.keys(kolom).find(k => k.startsWith("tahun wafat"));
+          const nilaiWafat = kunciWafat !== undefined ? kolom[kunciWafat] : undefined;
+          let t = (nilaiWafat !== undefined && nilaiWafat !== null) ? nilaiWafat.toString().trim() : "";
+          if (t === "") t = "-";
+          if (/^(hidup|masih hidup|معاصر)$/i.test(t)) t = "معاصر";
+          const info = (kolom["info"] !== undefined && kolom["info"] !== null) ? kolom["info"].toString().trim() : "";
+
+          // Jika nama sudah ada di sheet Arab, sheet Arab yang dipakai
+          if (nama && !kamusWafatPenulis[nama]) {
+            kamusWafatPenulis[nama] = { wafat: t, info: info, masehi: true };
           }
         });
         return;
@@ -4262,6 +4307,7 @@ function clearTahun() {
                         // Cek dengan aman apakah kamusWafatPenulis sudah di-load
                         let dataPenulis = (typeof kamusWafatPenulis !== 'undefined') ? kamusWafatPenulis[kunciPenulis(namaAsli)] : null;
 let tahunWafatAsli = dataPenulis ? dataPenulis.wafat : "";
+let wafatMasehi = dataPenulis ? dataPenulis.masehi === true : false;
 let infoMasyhur = dataPenulis ? dataPenulis.info : ""; 
 let teksWafatFinal = "";
                                                 
@@ -4277,8 +4323,12 @@ let teksWafatFinal = "";
                             } else if (tahunTeks === "-") {
                                 // Jika diisi strip di Excel (untuk instansi/grup dkk)
                                 teksWafatFinal = "[-]"; 
+                            } else if (wafatMasehi && /^\d+$/.test(tahunTeks)) {
+                                // Tahun Masehi: tampil apa adanya, urutan memakai perkiraan tahun Hijriah
+                                teksWafatFinal = "[w. " + tahunTeks + " M]";
+                                tahunWafatAsli = String(Math.round((parseInt(tahunTeks, 10) - 622) * 1.030684));
                             } else {
-                                // Jika berupa angka tahun
+                                // Jika berupa angka tahun Hijriah
                                 teksWafatFinal = "[توفي : " + keAngkaArab(tahunTeks) + " هـ]";
                             }
                         }
@@ -4312,7 +4362,10 @@ let teksWafatFinal = "";
                     // Pastikan infoArab tidak kosong sebelum dicocokkan
                     let infoMatch = infoArab.length > 0 ? infoArab.includes(keyword) : false;
 
-                    return namaArab.includes(keyword) || infoMatch;
+                    // Nama Latin (penulis dari sheet Latin) dicari dari namanya sendiri
+                    let namaLatinMatch = /[a-z]/.test(keyword) ? p.nama.toLowerCase().includes(keyword) : false;
+
+                    return namaArab.includes(keyword) || infoMatch || namaLatinMatch;
                 });
             }
 
@@ -4712,7 +4765,7 @@ if (sortPenulisSaatIni === 'wafat') {
                 wafatEl.className = '';
                 wafatEl.style.fontSize = '1rem';
             }
-            wafatEl.innerText = formatWafat(wafat) || "Tidak diketahui";
+            wafatEl.innerText = formatWafat(wafat, ambilMasehi(hapusHarakat(currentBookInfo.penulis))) || "Tidak diketahui";
 
             // KUNCI PERBAIKAN AUTO-SAVE: Siapkan isi teks review di latar belakang 
             // agar Excel tidak me-reset teks review saat kita menyimpan gambar!
@@ -4859,7 +4912,7 @@ if (sortPenulisSaatIni === 'wafat') {
                 const dataBukuAman = encodeURIComponent(JSON.stringify(buku)).replace(/'/g, "%27");
                 
                 let wafat = ambilWafat(hapusHarakat(buku.penulis));
-                let infoWafat = formatWafat(wafat) ? `(Wafat: ${formatWafat(wafat)})` : "";
+                let infoWafat = formatWafat(wafat, ambilMasehi(hapusHarakat(buku.penulis))) ? `(Wafat: ${formatWafat(wafat, ambilMasehi(hapusHarakat(buku.penulis)))})` : "";
 
                 // KUNCI: Cek apakah buku ini sedang dipinjam
                 const isDipinjam = cekBukuDipinjam(buku.judul, buku.etalase);
@@ -4913,7 +4966,7 @@ if (sortPenulisSaatIni === 'wafat') {
                 // 1. Trik Tahun Wafat (Digabung ke nama agar muncul otomatis di Word)
                 let wafat = ambilWafat(hapusHarakat(buku.penulis));
                 if (wafat && wafat !== "-" && wafat !== "?" && wafat !== "9999" && wafat !== "معاصر") {
-                    pnl += ` (w. ${wafat} H)`;
+                    pnl += ` (w. ${formatWafat(wafat, ambilMasehi(hapusHarakat(buku.penulis)))})`;
                 }
                 
                 // 2. Detektif Tahun Cetakan (Memisahkan "Dar Al-Fikr" dan "1415")
@@ -4958,7 +5011,7 @@ if (sortPenulisSaatIni === 'wafat') {
             // 1. Trik Tahun Wafat
             let wafat = ambilWafat(hapusHarakat(currentBookInfo.penulis));
             if (wafat && wafat !== "-" && wafat !== "?" && wafat !== "9999" && wafat !== "معاصر") {
-                pnl += ` (w. ${wafat} H)`;
+                pnl += ` (w. ${formatWafat(wafat, ambilMasehi(hapusHarakat(currentBookInfo.penulis)))})`;
             }
             
             // 2. Detektif Tahun Cetakan
@@ -6531,7 +6584,7 @@ async function prosesFinalSimpanUbah() {
             document.getElementById('revJudul').innerText = currentBookInfo.judul;
             // 1. Gabungkan Nama Penulis dengan Tahun Wafat di akhirnya (ujung kiri Arab)
             let wafat = ambilWafat(hapusHarakat(currentBookInfo.penulis));
-            let teksWafat = (wafat && wafat !== "-") ? (wafat === "معاصر" ? " (معاصر)" : ` (ت ${wafat} هـ)`) : "";
+            let teksWafat = (wafat && wafat !== "-") ? (wafat === "معاصر" ? " (معاصر)" : (ambilMasehi(hapusHarakat(currentBookInfo.penulis)) ? ` (w. ${wafat} M)` : ` (ت ${wafat} هـ)`)) : "";
             document.getElementById('revPenulis').innerText = currentBookInfo.penulis + teksWafat;
             
             document.getElementById('revJilid').innerText = currentBookInfo.jilid;
